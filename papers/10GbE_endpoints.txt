@@ -1,0 +1,1333 @@
+Empirical Characterization of Uncongested Lambda Networks and 10GbE
+Commodity Endpoints
+Tudor Marian, Daniel A. Freedman, Hakim Weatherspoon, Ken Birman
+Computer Science Department, Cornell University, Ithaca, NY 14850
+{tudorm,dfreedman,hweather,ken}@cs.cornell.edu
+
+Abstract
+
+are largely uncongested, and traffic traveling over uncongested optical networks is expected to be perfect. Indeed,
+to break wide-area network speed records, conditions are
+often nearly perfect and aggressive, highly-tuned, and specialized software and hardware are employed [1, 33]. When
+such scenarios are not in force, performance can suffer; for
+example, TCP throughput plummets with packet loss. Interestingly, this latter example of an imperfect uncongested
+lambda network is not uncommon [3].
+However, more likely, poor performance is due to fairly
+familiar artifacts—packet loss experienced at the end-hosts
+themselves. It would be unfortunate for a packet to
+travel potentially tens of thousands of miles over expensive lambda links only to subsequently be dropped by the
+receiving end-host. Indeed, given the growing discrepancy
+between network speeds and individual processor speeds, as
+depicted in Figure 1, one would expect that were any packets dropped, it would be at the end-host instead of within the
+network core. This “impedance mismatch” is further aggravated should the bottlenecks prove to be buses, e.g. the FSB
+(Front-Side Bus), instead of the CPU cores. Moreover, taking advantage of multiple CPU cores to handle 10GbE traffic is nontrivial—for example, having many cores access the
+same NIC (Network Interface Controller) is prohibitively
+expensive due to contention, while the receive side scaling
+(RSS) of multi-queue NICs works best for large numbers
+of lower bandwidth flows. As a result, the current trend
+of slow CPU cores and fast networks has cemented the infrastructure’s reliance on batching techniques, like interrupt
+coalescence and NAPI [2], for appropriate performance.
+Given the growing disparity between network speeds and
+CPU core speeds, we recognize the importance of measuring the combined characteristics of new networks as they
+become available, such as the 10 Gbps wide-area networks
+we test here, and how end-hosts affect network performance
+experienced by the end-user. Systematic measurements
+have been performed over many prominent, albeit significantly older, networks such as the ARPANET, its successor
+NSFNET [19, 22], and subsequently over the early Internet [32]. However, there have been few studies of existing
+
+High-bandwidth semi-private lambda networks, provisioned with dedicated wavelengths on fiber optic spans,
+serve as important transport mechanisms for critical data
+flows, including scientific, military, and financial users.
+This work provides a careful examination of the observed
+characteristics of such networks in an uncongested state,
+evaluating loss, latency, and throughput at the end-host.
+Through our measurements, we quantify both rates and locations of loss events, providing insight into the recognized
+degradation from promised network performance for the
+user community, and the loss of dependability of the network as a whole. Finally, we identify specific scenarios
+which engender greater loss rates and make suggestions for
+future directions that could alleviate these barriers to infrastructure performance and dependability.
+
+1
+
+Introduction
+
+Optical lambda networks have emerged as the enabling
+technology for a new class of globally distributed highperformance applications that coordinate across vast geographical distances. Such networking infrastructure provides a high-bandwidth semi-private transport mechanism,
+with dedicated wavelengths along fiber optic spans that connect remote data centers, such as those for scientific, military, and financial sites. For example, astronomers and
+physicists at Cornell University often receive high-volume
+data streams from the Arecibo Observatory or the Large
+Hadron Collider, analyze the data at the San Diego Supercomputer Center, and return results to Cornell for storage
+and future reference.
+Even though such semi-private lambda networks overprovision their bandwidth, dedicate their transport for specific use, and routinely maintain an idle state [7], endusers often do not receive the capabilities or performance
+they expect [9]. This is surprising given that, unlike the
+conventional public Internet, semi-private lambda networks
+1
+
+Network Bandwidth / Processor Speed [Mbps/MHz]
+
+enced by the end-host.
+• The TCP throughput decreases as packet loss increases, and this phenomenon grows in severity as
+a function of both the path length and the window
+size. The congestion control algorithm turns out to
+have only a marginal role in determining the achievable throughput.
+
+101
+10 Gbps
+3.2 GHz
+
+100
+
+100 Mbps
+200 MHz
+
+3 Mbps
+5 MHz
+
+Processor - Network
+Impedance Mismatch
+
+10-1
+1975
+
+• The NIC interrupt affinity—the policy that determines
+which CPU / core handles which interrupt issued
+by the network card—determines the ability of the
+end-host to handle load graciously or not (e.g. the
+packet receive rate where the host enters receive livelock [26]). It also determines the amount of loss observed at the end-host.
+
+1980
+
+1985
+
+1990
+
+Year
+
+1995
+
+2000
+
+2005
+
+2010
+
+Figure 1. Network to single CPU speed ratio.
+
+• Packet batching, performed by kernel NAPI [2] and the
+NIC interrupt throttling, increases overall throughput.
+However, such techniques are detrimental for latencysensitive measurements, for example interfering with
+the measurement of packet inter-arrival times.
+
+lambda networks, and those are not particularly comprehensive, nor does the literature include studies that consider the
+interactions between the high-bandwidth optical core [27]
+of a lambda network and 10GbE commodity end-hosts.
+To this end, we have constructed a new experimental networking infrastructure testbed, the Cornell National
+Lambda Rail (NLR) Rings. We use this testbed to explore
+the properties of wide-area optical networks under real use
+conditions, focusing on the scenario in which the network
+user has semi-dedicated access to an uncongested 10GbE
+end-to-end lambda. The Cornell NLR Rings testbed consists of a set of four optical network paths that start and end
+at Cornell and permit transmission of data on various different cross-country trips. The Cornell NLR Rings include
+10 out of the total 13 layer-3 NLR links, and all the NLR
+routers; our longest ring spans over 8000 miles one-way
+and takes 97.45 ms to traverse in one direction.
+Using the Cornell NLR Rings testbed we were able to
+confirm that the core of the network is indeed uncongested,
+and that loss within the core of the network is very rare.
+While sending approximately 20 billion packets, we accounted for all packet loss in a 48-hour interval and observed only one brief instance where packets were lost in
+the core. In contrast, we find that substantial levels of loss
+occur at the end-host. From the perspective of a network
+engineer and operator, this is problematic, given that endpoints are typically 10GbE commodity machines with default configurations and stocked with out-of-the-box conventional transport protocols such as vanilla TCP—known
+to perform poorly on high bandwidth×delay links [11, 12].
+Importantly, we show that end-to-end measurements are
+highly dependent on the configuration of the end-host. In
+particular, we show that:
+
+Worse, although causes for network performance degradation may appear familiar, the trend is for each issue to be
+exacerbated going into the future due to increasing disparity between network and CPU core speeds, as in Figure 1.
+Though the focus of this work is to characterize lambda
+networks and end-host behavior, it also provides insight
+into possible future directions for practical improvements
+in network operations (see discussion in Section 4). Possible solutions include masking rather than preventing loss
+at the end-host, for example using forward error correction
+(FEC) across different communication channels, or using
+perimeter-middleboxes that cache and re-send lost packets
+in order to avoid TCP sender retransmissions.
+The paper is structured as follows: In Section 2 we detail
+two examples of uncongested lambda networks—the TeraGrid [8] and our own Cornell NLR Rings testbed. Section 3
+presents our experimental results, Section 4 discusses possible future directions, and Section 5 presents related work,
+while Section 6 concludes.
+
+2
+
+Uncongested Lambda Networks
+
+Lambda networking, as defined by the telecommunications industry, is the technology and set of services directly
+surrounding the use of multiple optical wavelengths to provide independent communication channels along a strand
+of fiber optic cable [36]. In this section, we present two examples of lambda networks, namely TeraGrid [8] and the
+Cornell NLR Rings testbed. Both networks consist of semiprivate, uncongested 10 Gigabit per second (Gbps) optical
+Dense Wavelength Division Multiplexing (DWDM) or OC192 Synchronous Optical Networking (SONET) links.
+
+• The size of the socket buffer and of the DMA (direct
+memory access) ring determines the loss rate experi2
+
+were dropped along the optical path, at intermediate devices
+(e.g. optical or electrical switches), or at the end-hosts. Finally, loss occurred on paths where levels of optical link utilization (determined by 20-second moving averages) were
+consistently lower than 20%, making congestion highly unlikely, a conclusion supported by the network administrators [10].
+Lacking more detailed information about the specific
+events that trigger loss in TeraGrid, we can only speculate
+about the sources of the high observed loss rates. Several
+hypotheses suggest themselves:
+
+30
+
+% of Measurements
+
+25
+20
+15
+10
+5
+0
+0.01 0.03 0.05 0.07 0.1 0.3 0.5
+% of Lost Packets
+
+0.7
+
+• Device clutter—the critical communication path between any two end-hosts consists of many electronic
+devices, each of which represents a potential point of
+failure.
+
+1
+
+Figure 2. Loss Rates on TeraGrid.
+
+2.1
+
+TeraGrid
+
+• End-host loss—common wisdom has that the majority
+of packets are dropped when incoming traffic overruns
+the receiving machine. 1
+
+TeraGrid [8] is an optical network interconnecting ten
+major supercomputing sites throughout the United States.
+The backbone provides 30Gbps or 40Gbps aggregated
+throughput over 10GbE and SONET OC-192 links [27].
+End-hosts, however, connect to the backbone via 1Gbps
+links, hence the link capacity between each pair of end-host
+sites is 1Gbps.
+Of particular interest is the TeraGrid monitoring framework [3]; each of the ten sites perform periodic UDP measurements with Iperf [35], reporting throughput and loss
+rates. Every site issues a 60 second probe to every other
+site once an hour, resulting in a total of 90 overall measurements collected every hour. Figure 2 shows a histogram of
+percentage packet loss between November 1st, 2007, and
+January 25th, 2008, where 24% of the measured loss rates
+had 0.01% loss and a surprising 14% of them had 0.10%
+loss. After eliminating a single TeraGrid site (Indiana University) that dropped incoming packets at a steady 0.44%
+rate, 14% of the remainder of the measurements showed
+0.01% loss, while 3% showed 0.10% loss.
+Although small, such numbers are sufficient to severely
+reduce the throughput of TCP/IP on these high-latency,
+high-bandwidth paths [12, 28]. Conventional wisdom states
+that optical links do not drop packets. Indeed, carrier-grade
+optical equipment is often configured to shut down beyond
+bit error rates of 10−12 —or one out of a trillion bits. However, the reliability of the lambda network is far less than
+the sum of its optical parts—in fact it can be less reliable by
+orders of magnitude. Consequently, applications depending on protocols like TCP/IP, which require high reliability
+from high-speed networks, may be subject to unexpectedly
+high loss rates, and hence low throughput.
+Note that Figure 2 shows the loss rate experienced during UDP traffic on end-to-end paths, which is not easily
+generalized to TCP. Furthermore, it is unclear if packets
+
+• Cost-benefit of service—It may be the case that loss
+rates are typical of any large-scale networks, where
+the cost of immediately detecting and fixing failures
+is prohibitively high. For example, dialogue with the
+administrators revealed that the steady loss rate experienced by Indiana University site was due to a faulty
+network card, and the measurements showed that the
+error persisted over at least a three month period.
+
+2.2
+
+Cornell University NLR Rings
+
+Clearly, greater control is necessary to better determine
+the triggers of loss in such uncongested lambda networks.
+Rather than probing further into the characteristics of the
+TeraGrid network, we chose instead to create our own network measurement testbed centered at Cornell and extending across the United States; this is the Cornell National
+LambdaRail (NLR) Rings testbed. In order to understand
+the properties of the Cornell NLR Rings, we provide a fairly
+detailed description of our measurement infrastructure in
+this section. The following section contains experiments
+and measurement results.
+The Cornell NLR Rings testbed takes advantage of the
+existing National LambdaRail [6] backbone infrastructure.
+Two commodity end-hosts are connected to the backbone
+router in Ithaca, New York, shown as Egress and Ingress
+end-hosts in Figure 3. The commodity end-hosts are fourway Xeon quad-core Dell PowerEdge R900 machines with
+1 In NAPI [2] mode, packets can be dropped in either of two places:
+when there is insufficient room available on the rx DMA ring, and when
+enqueueing the packet on the socket buffer would breach the socket buffer
+limit. In both cases the receiver is overwhelmed and loss is observed, but
+the precise conditions capable of producing these losses differ.
+
+3
+
+Figure 4. Test traffic on exception (left) and long (right) paths, as observed by NOC Realtime Atlas.
+NLR(NYC)
+Backbone
+Router
+
+exception path from all others.
+The Cornell (Ithaca and NYC) Backbone Routers and
+the NLR (NYC) Backbone Router handle double the
+amount of aggregated traffic of any other router along the
+paths, but that the traffic flows in distinct directions. All
+three are high-end dedicated Cisco hardware. The NLR
+(NYC) Backbone Router is a CRS-1 model, while the Cornell (Ithaca and NYC) Backbone Routers are Catalyst 6500
+series hardware. These routers all have sufficient backplane
+to operate at their full rated speed of 10Gbps irrespective of
+the traffic pattern; the loads generated in our experiments
+thus far have provided no evidence to the contrary.
+The Cornell (Ithaca and NYC) Catalyst 6500s are
+equipped with WSX6704-10GE Ethernet modules with
+centralized forwarding cards. The Quality of Service (QoS)
+feature of these modules was disabled, hence in the event
+of an over-run, all traffic is equally likely to be discarded.
+In particular, packets are served in the order in which they
+are received. If the buffer is full, all subsequent packets are
+dropped, a discipline sometimes referred to as FIFO queueing with drop-tail [18].
+Figure 4 shows the layer-3 load on the entire NLR backbone network at the time we performed controlled 2Gbps
+high-bandwidth UDP traffic experiments over the exception
+and the long paths. The figure highlights the topological
+setup chosen for the exception and long paths. Importantly,
+it also shows that the paths are uncongested. When our tests
+are running, the associated loop will be shown in yellow: a
+level of link utilization roughly 20% exclusively on the path
+segments part of our Cornell NLR Rings testbed.
+
+long
+medium
+
+exception
+
+short
+Cornell
+(Ithaca)
+Backbone
+Router
+
+Egress
+R900 End-host
+
+~350km
+Cornell (NYC)
+Backbone
+Router
+Ingress
+End-host R900
+
+Figure 3. Cornell NLR Rings Topology.
+32GB RAM, each equipped with an Intel 10GbE LR PCIe
+x8 adapters (EXPX9501AFXLR). They run a preemptive
+64-bit Linux 2.6.24 kernel, with the Intel ixgbe driver
+version 1.3.47. The generic segmentation offload (GSO)
+was disabled since it is incompatible with the Linux kernel
+packet forwarding subsystem.
+Through a combination of VLAN (virtual LAN) tagging
+(IEEE 802.1Q) and source-, policy-, and destination-based
+routing we established four static 10GbE full duplex routes
+that begin and end at Cornell, but transit various physical
+lengths: a short ring to New York City and back, an exception ring via Chicago, Atlanta, and New York City, a
+medium ring via Chicago, Denver, Houston, Atlanta, and
+New York City, and a long ring through Chicago, Denver, Seattle, Los Angeles, Houston, Atlanta, and New York
+City (Figure 3). The one-way latency (one trip around the
+ring) is 7.95 ms for the short path, 37.3 ms for the exception path, 68.9 ms for the medium path, and 97.45 ms for
+the long path, respectively. All optical point-to-point backbone links use Dense Wavelength Division Multiplexing
+(DWDM) technology, except for a single OC-192 SONET
+link between Chicago and Atlanta, thus differentiating the
+
+3
+
+Experimental Measurements
+
+In this section, we use the Cornell NLR Rings testbed
+to answer the following questions with respect to the traffic
+characteristics over uncongested lambda networks:
+• Under what conditions does packet loss occur, and
+where does the loss take place?
+• How does NIC interrupt affinity affect packet loss?
+4
+
+• How does the choice of TCP protocol stack impact the
+measured throughput?
+Packet loss fraction
+
+• How does packet batching, induced by NAPI [2]
+and / or NIC interrupt throttling, affect overall throughput and latency measurements, like packet dispersion?
+
+3.1
+
+Experimental Setup
+
+Our experiments generate UDP and TCP Iperf [35] traffic between the two commodity end-hosts over all paths, i.e.
+between the Egress and the Ingress end-hosts depicted in
+Figure 3. We modified Iperf to report (for UDP traffic) precisely which packets were lost and which were received out
+of order. Additionally, for increased precision, we patched
+the Linux kernel to time-stamp each received packet with
+the TSC (CPU time stamp counter that counts clock cycles)
+instead of the monotonic wall-clock. We implement this by
+overwriting the SO TIMESTAMPNS socket option to return
+the 64 bit value of the TSC register. For the TSC time-stamp
+values to be monotonic (a validity requirement), they must
+originate from the same CPU. This means that all NIC interrupts notifying a packet arrival must be handled by the
+same CPU, since received packets are time-stamped in the
+interrupt service routine. Before and after every experimental run, we read kernel counters on both sender and receiver
+that account for packets being dropped at the end-host in
+the DMA ring, socket buffer, or TCP window. The default
+size of each rx (receive) and (transmit) tx DMA ring is 1000
+slots, while the MTU (Maximum Transfer Unit) is set to the
+default 1500 bytes (i.e. we did not use jumbo frames).
+Throughout our experiments all NLR network segments
+were uncongested—as a matter of fact the background traffic over each link never exceeded 5% utilization. 2
+
+0.0004
+0.0003
+0.0002
+0.0001
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+0
+
+7.95ms
+(short)
+
+37.3ms
+(exception)
+
+68.9ms
+(medium)
+
+97.45ms
+(long)
+
+Figure 5. UDP loss ratio, 1MB socket buffers,
+irqbalance on, various sender data rates.
+
+Interrupts via Irqbalance
+Figure 5 shows fractional packet loss versus sender data
+rate for each of the path lengths with the irqbalance
+daemon running and the socket buffer size set to 1MB. The
+bars represent total loss as observed by the receiving Iperf
+application, split into three components denoting the precise location where loss can occur. As seen in the Figure,
+loss may be a consequence of over-running the socket buffer
+(sockbuf loss), over-running the rx (receive) DMA ring
+(rx ring loss), or numerous factors within the network
+core (network loss). 3 The Figure shows that there was
+zero loss in the network core; all loss occurs within the receivers’ socket buffer. Moreover, for socket buffer sizes of
+2MB and 4MB respectively, there is zero loss reported for
+the tested data rates—hence the lack of corresponding figures.
+There are other places not in the network core where loss
+may have occurred; however, we dismiss them for the following reasons:
+
+Packet Loss
+
+To measure packet loss over the Cornell NLR Rings
+testbed, we performed many sequences of 60-second UDP
+Iperf runs over a period of 48 hours. We iterated over all
+paths (short, exception, medium, and long), for data rates
+ranging between 400Mbps to 2400Mbps at 400Mbps intervals. The sender and receiver were configured identically as follows. First, they were allocated socket buffers
+of 1, 2, or 4MB. Next, we alternated between using the
+irqbalance [4] daemon and statically assigning the
+interrupts issued by the NICs to specific CPUs. The
+irqbalance daemon uses the kernel CPU affinity interface (the /proc/irq/IRQ#/smp affinity special
+files) and periodically re-assigns hardware interrupts across
+processors in order to increase performance. We present
+results first using interrupts via irqbalance, then using NIC
+interrupt affinity to bind interrupts to a single CPU.
+2 Utilization
+
+0.0005
+
+2400
+2000
+1600
+1200
+800
+400
+
+3.2
+
+sockbuf_loss
+rx_ring_loss
+network_loss
+
+0.0006
+
+• The sender socket buffer is never over-run during the
+entire 48-hour duration of the experiment—in accordance with the blocking nature of the socket API.
+• The sender (transmit) tx DMA ring was never over-run
+during the entire 48-hour duration of the experiment.
+• Neither the sender nor receiver NIC report any errors
+(e.g. corruption) or internal (on board) buffer over-run
+during the entire 48-hour duration of the experiment.
+• Since we used Iperf with UDP traffic, the receiver does
+not transmit any packets.
+3 The ixgbe NIC driver was built with NAPI support, hence there is no
+backlog queue in the kernel between the DMA ring and the socket buffer.
+
+computed by the monitoring system [7] every 1-5 seconds.
+
+5
+
+sockbuf_loss
+rx_ring_loss
+network_loss
+
+0.0006
+Packet loss fraction
+
+Packet loss fraction
+
+0.2
+0.15
+0.1
+
+0.05
+
+0.0005
+0.0004
+0.0003
+0.0002
+0.0001
+
+97.45ms
+(long)
+
+(a)
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+68.9ms
+(medium)
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+37.3ms
+(exception)
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+7.95ms
+(short)
+
+0
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+0
+
+7.95ms
+(short)
+
+37.3ms
+(exception)
+
+68.9ms
+(medium)
+
+97.45ms
+(long)
+
+(b) Y-axis scaled as that of Figure 5.
+
+Figure 6. UDP loss ratio, 1MB socket buffers, irqs bound to cores, various sender data rates.
+sockbuf_loss
+rx_ring_loss
+network_loss
+
+0.0006
+Packet loss fraction
+
+Packet loss fraction
+
+0.2
+0.15
+0.1
+
+0.05
+
+0.0005
+0.0004
+0.0003
+0.0002
+0.0001
+
+97.45ms
+(long)
+
+(a)
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+68.9ms
+(medium)
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+37.3ms
+(exception)
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+7.95ms
+(short)
+
+0
+
+2400
+2000
+1600
+1200
+800
+400
+
+2400
+2000
+1600
+1200
+800
+400
+
+0
+
+7.95ms
+(short)
+
+37.3ms
+(exception)
+
+68.9ms
+(medium)
+
+97.45ms
+(long)
+
+(b) Y-axis scaled as that of Figure 5.
+
+Figure 7. UDP loss ratio, 4MB socket buffers, irqs bound to cores, various sender data rates.
+
+Interrupts Bound to a Single CPU
+
+served loss. Taking a closer look, we noticed that the receiver was experiencing receive livelock [26]. On a 2.6
+Linux kernel, receive livelock can be easily observed as
+the network bottom half executing in a softirq cannot finish in a timely manner, and is forced to start the the corresponding ksoftirqd/CPU# kernel thread. The thread
+runs exclusively on the same CPU, and picks up the remaining work the softirq did not finish, acting as a rate limiter.
+As a result, the receive livelock occurs given that all interrupts (rx, tx, rxnobuff, etc.) were serviced by a single overwhelmed CPU—the same CPU that runs the corresponding ksoftirqd/CPU# and the user-mode Iperf task. The
+Iperf task is placed on the same CPU since the scheduler’s
+default behavior is to minimize cache thrashing. Consequently, there is not enough CPU time remaining to consume the packets pending in the socket buffer in a timely
+fashion. Hence, the bigger the socket buffer, the more significant the loss, precisely as Figures 6(a) and 7(a) show.
+
+A more interesting scenario emerges when we assign all
+interrupts from the NIC to be handled by a single core. In
+particular, Figures 6 and 7 show fractional UDP packet loss
+for socket buffer sizes of 1MB and 4MB. For a 2MB socket
+buffer the plot is identical in shape to Figure 6, but with a ∼
+0.12 packet loss fraction for a sender data rate of 2400Mbps.
+There are three key points of interest. First, Figure 7
+shows a particular event—the only loss in the core network
+we experienced during the entire 48-hour period, occurring
+on the medium path (one way latency is 68.9 ms) for a
+sender data rate of 400Mbps. During the course of the experiments, this was a single outlier that occurred during a
+single 60-second run. We believe it could have been caused
+by events such as NLR maintenance. 4
+Second, at 2400Mbps there is an abrupt increase in ob4 We have experienced path blackouts due to various path segments being serviced, replaced, or upgraded.
+
+Third, the end-host packet loss increases with the sender
+6
+
+3.3
+reno
+cubic
+bic
+vegas
+htcp
+hybla
+illinois
+scalable
+westwood
+yeah
+
+Throughput (Mbps)
+
+5000
+4000
+3000
+2000
+
+Although UDP is well suited for measuring packet loss
+rates and indicating where loss occurs, TCP [23] is the defacto reliable communication protocol; it is virtually embedded in every operating system’s network stack. Many
+TCP congestion control algorithms have been proposed—
+Fast TCP, High Speed TCP, H-TCP, BIC, CUBIC, Hybla,
+TCP-Illinois, Westwood, Compound TCP, Scalable TCP,
+YeAH-TCP—and almost all have features intended to improve performance over high bandwidth high latency links,
+i.e. Long Fat Networks (LFNs).
+To measure the achievable throughput, we conducted a
+set of 24-hour bulk TCP transfer tests over all the paths
+of the Cornell NLR Rings, using 60 second Iperf bursts.
+Throughout our experiments we used all variants enumerated above, except for TCP Low Priority, and TCP Veno—
+the latter is an optimized variant for wireless networks and
+designed to better deal with random loss.
+Figure 8 shows the TCP throughput for a single flow for
+all available TCP versions, over all paths. The TCP window
+sizes were configured with respect to each path RTT (Round
+Trip Time) such that a single flow would be able to reach
+1Gbps. A higher window translates into larger amount of
+in-flight and not yet acknowledged data, which is necessary but not sufficient—as the figures show—to yield high
+throughput on high latency, high bandwidth links. In particular, a single TCP flow of 1Gbps on the short path should
+have a TCP window no smaller than 2MB, 9.4MB on the
+exception path, 17.3MB on the medium path, and 24.4MB
+on the long path. Almost all TCP variants yield roughly the
+same throughput with the exception of TCP Vegas that underperforms. No packet loss occurred for any of the singleflow TCP variants.
+Since the TCP window size is a kernel configuration parameter and superuser privileges are required to adjust it,
+typical user-mode applications like GridFTP [11] strive to
+maximize throughput by issuing multiple TCP flows in parallel to fetch / send data. To experiment with multiple flows,
+we ran four TCP Iperf flows in parallel in order to saturate each end-host’s capacity and yield maximum throughput. Figure 9(a) depicts the throughput results. Although
+the window sizes should be sufficient, the overall throughput decreases as the path length increases. Importantly, loss
+at the end-host does occur for multiple TCP flows. Moreover, some TCP variants yield marginally better aggregate
+throughput than others when competing with flows of the
+same type. The TCP throughput over the short path is identical to the maximum throughput achieved during control
+experiments. We performed the control experiments by directly connecting the end-hosts with an optical patch cable.
+Even though TCP is a reliable transport protocol, packet
+loss, albeit at the end-host, does affect performance [28].
+
+1000
+0
+7.95
+(short)
+
+37.3
+68.9
+(exception) (medium)
+One Way Latency (ms)
+
+Throughput
+
+97.45
+(long)
+
+Figure 8. TCP throughput for a single flow
+configured for 1Gbps.
+
+data rate, shown in Figures 6(b) and 7(b). Figure 6(b) corresponds to a relatively small buffer, 1MB, so the effect is
+clear. Figure 7(b) uses a larger buffer (4MB) hence no packets were lost for data rates below 2400Mbps except for negligible loss along the short path at a data rate of 2000Mbps.
+Similarly, this trend is evident in Figure 5 (irqbalance enabled); however, at sufficiently high data rates, irqbalance
+spreads the interrupts to many different CPUs and the loss
+decreases.
+
+Packet Loss Summary
+
+In general, these experiments show virtually no loss in
+the network core. Instead, loss occurs at the end-hosts, notably at the receiver. End-host loss is typically the result of a
+buffer over-run in the socket, backlog queue, or DMA ring.
+NIC interrupt affinity to CPUs affects loss, and is pivotal in determining the end-host’s ability to handle load graciously. Our experiments show that at high data rates irqbalance works well (i.e. decreases loss), whereas at low data
+rates, binding NIC interrupts to the same CPU reduces loss
+more than irqbalance. One benefit of binding all NIC interrupts to the same CPU stems from the fact that the driver
+(code and data), the kernel network stack, and the usermode application incur less CPU cache pollution overhead.
+Unless the receiver is overloaded, a sufficiently large
+socket buffer prevents loss. For example, in the case of
+the interrupts via irqbalance loss does not occur for buffer
+sizes of 2 and 4MB respectively. Likewise, Figure 7(b)
+shows that, for data rates below 2400Mbps, only the short
+path at 2000Mbps exhibited end-host loss (specifically,
+0.000002647) for a 4MB socket buffer.
+7
+
+Throughput (Mbps)
+
+4000
+3000
+2000
+
+Packet loss fraction (normalized)
+
+0.0014
+
+reno
+cubic
+bic
+vegas
+htcp
+hybla
+illinois
+scalable
+westwood
+yeah
+
+5000
+
+0.0012
+0.001
+0.0008
+
+snd_txloss
+snd_rxloss
+snd_tcploss
+snd_tcppruning
+rcv_txloss
+rcv_rxloss
+rcv_tcploss
+rcv_tcppruning
+
+0.0006
+0.0004
+0.0002
+
+1000
+0
+yeah
+westwood
+scalable
+illinois
+hybla
+htcp
+vegas
+bic
+cubic
+reno
+yeah
+westwood
+scalable
+illinois
+hybla
+htcp
+vegas
+bic
+cubic
+reno
+yeah
+westwood
+scalable
+illinois
+hybla
+htcp
+vegas
+bic
+cubic
+reno
+yeah
+westwood
+scalable
+illinois
+hybla
+htcp
+vegas
+bic
+cubic
+reno
+
+0
+7.95
+(short)
+
+37.3
+68.9
+(exception) (medium)
+One Way Latency (ms)
+
+97.45
+(long)
+
+7.95ms
+(short)
+
+(a) TCP throughput.
+
+37.3ms
+(exception)
+
+68.9ms
+(medium)
+
+97.45ms
+(long)
+
+(b) TCP loss.
+
+Figure 9. TCP throughput (a) and loss (b) for four concurrent flows.
+Figure 9(b) shows the fractional packet loss corresponding
+to the TCP throughput in Figure 9(a). Unlike UDP loss,
+any analysis of TCP loss must account for retransmissions,
+selective and cumulative acknowledgments, different size of
+acknowledgments, and timeouts. Figure 9(b) shows loss as
+reported both at the sender (bar names starting with snd )
+and the receiver (bar names starting with rcv ), within the
+DMA rings (bar names ending in txloss and rxloss),
+inferred by TCP itself (bar names ending in tcploss),
+and due to the inability of the user-mode process owning
+the socket to read the data in a timely fashion (bar names
+ending in tcppruning).
+Although at first glance the figure appears overly dense,
+there are only three points where loss is occurring: the
+receiver’s rx (receive) DMA ring (rcv rxloss), loss
+that is then largely inferred by the sender’s TCP stack
+(snd tcploss), and finally, within the sender’s rx (receive) DMA ring (snd rxloss). The sender sends MTU
+size (1500 bytes) TCP data packets and receives TCP empty
+(52 byte) payload ACKs (20 byte IP header + 20 byte TCP
+header + 12 byte TCP options).
+There are two significant observations. First, loss occurs at the end-host in the rx DMA rings—the receiver will
+drop inbound payload packets, while the sender will drop
+inbound ACK packets. Recall that the NIC is configured
+to a default value of 1000 slots per DMA ring. The socket
+buffer is essentially the TCP window; hence, it is adjusted to
+a large value in this experiment. Second, there are far more
+ACK packets (snd rxloss) being lost than payload packets (rcv rxloss). Figure 9 (b) shows the loss fraction
+normalized to packet size instead of packet count. However, since ACKs are cumulative, TCP can afford to lose a
+significant portion of a window worth of ACKs on the rx
+DMA ring, provided that a single ACK with an appropriate (subsequent) sequence number is delivered to the TCP
+stack. There is no loss observed by TCP Vegas since its low
+
+throughput is insufficient to induce end-host loss, a scenario
+identical to the one already described in Figure 8.
+Our experiments show that as path length increases,
+more data and, importantly, more ACKs are lost since the
+TCP windows are enlarged to match the bandwidth delay
+product of the longer paths. This affects performance, and
+throughput decreases as the path length increases.
+
+3.4
+
+Packet Batching
+
+In this section, we examine more closely the impact of
+receiver livelock on the measurements reported above.
+A CPU is notified of the arrival and departure of packets
+at a NIC by interrupts [34]. The typical interrupt-driven
+commodity kernel, however, can find itself driven into a
+state in which the CPU expends all available cycles processing interrupts, instead of consuming received data. If the interrupt processing overhead is larger than the rate at which
+packets arrive, receive livelock [26] will occur. 5 The typical solution is to batch packets by parameterizing the NIC
+to generate a single interrupt for a group of packets that arrive during some specified time interval. For example, Intel
+NICs offer an Interrupt Throttling configuration parameter
+that limits the maximum number of interrupts issued per
+second. If the device supports it, the kernel can take it one
+step further by functioning in “New API” (NAPI) [2] mode.
+Instead of being exclusively interrupt-driven, a NAPI kernel
+is interrupt-driven at low data rates, but switches to polling
+at high data rates.
+The benefit of packet batching techniques is an increase
+in maximum achievable bandwidth for a particular commodity architecture. For example, with NAPI and Interrupt
+Throttling disabled, the maximum achievable TCP throughput on our setup was approximately 1.9Gbps in control ex5 The interrupt overhead consists of two context switches and executing
+the top half of the interrupt service routine.
+
+8
+
+160
+
+Measured at the receiver
+Intended at the sender
+
+140
+
+Packet Inter-Arrival Time (us)
+
+Packet Inter-Arrival Time (us)
+
+160
+
+120
+100
+80
+60
+40
+20
+
+Measured at the receiver
+Intended at the sender
+
+140
+120
+100
+80
+60
+40
+20
+
+0
+
+0
+0
+
+50
+
+100
+
+150
+200
+Packet Number
+
+250
+
+300
+
+0
+
+(a) Interrupt throttling disabled at the receiver.
+
+50
+
+100
+
+150
+200
+Packet Number
+
+250
+
+300
+
+(b) Interrupt throttling enabled at the receiver.
+
+Figure 10. Packet Inter-Arrival Time, NAPI off, receiver interrupt throttling disabled (a), enabled (b).
+the receiver being over-run. Second, we showed that measurements are extremely sensitive to the configuration of the
+commodity end-hosts. In particular, we show that:
+
+periments with end-hosts directly connected to each other.
+With NAPI enabled and Interrupt Throttling rate set to the
+default value, we achieved around 3Gbps throughput, as
+shown in Figure 9(a). Note that, by default, the interrupt
+throttling rate parameter limits the interrupts issued per second to no more than 8000.
+However, this does not mean that packet batching is ideal
+in all scenarios, even though vanilla kernels and drivers
+enable batching by default. To illustrate this, consider a
+standard metric provided by high-end Ethernet test products [5]—the packet inter-arrival time, also known as packet
+dispersion. To perform this type of measurements on the
+Cornell NLR Rings testbed, we patched the Linux kernel to
+timestamp every received packet as early as possible (in the
+driver’s interrupt service routine) with the TSC (CPU time
+stamp counter) instead of the monotonic kernel wall-clock,
+thereby achieving cycle (nanosecond) resolution.
+Figure 10 shows the packet inter-arrival time for a UDP
+Iperf experiment consisting of a sequence of 300 packets
+at a data rate of 100Mbps (about one packet every 120 µs)
+with and without Interrupt Throttling enabled and NAPI disabled. Figure 10(b) shows that the interrupt batching superimposes an artificial structure on top of the packet dispersion, thereby yielding spurious measurement results. The
+implications of this phenomenon have significant consequences. For example, tools that rely on accurate packet
+inter-arrival measurements to estimate capacity and available bandwidth yield meaningless results when employed
+in conjunction with packet batching.
+
+3.5
+
+• Socket buffer size and DMA ring size determine the
+amount of loss experienced.
+• TCP throughput decreases with the increase in packet
+(and TCP ACK) loss, with the increase in path length,
+and the increase in window size. The congestion control algorithm is only marginally important in determining the achievable throughput (i.e. most variants
+are similar).
+• NIC interrupt affinity is pivotal in how the end-host
+handles load, and determines the amount of loss observed at the end-host.
+• Built-in kernel NAPI and NIC interrupt throttling improve throughput, although they are detrimental for latency sensitive measurements. This reinforces the conventional wisdom that there is no “one-size-fits-all” set
+of parameters, and careful parameter selection is necessary for the task at hand.
+
+4
+
+Future Directions
+
+Although the focus of this study is to characterize performance experienced by end-users connected to uncongested
+lambda networks, we summarize possible future directions
+that could potentially address end-host packet loss.
+
+Summary of Results
+
+• New generation hardware—take advantage of multiple CPU cores available on new and future processors.
+However, handling network traffic via many slow CPU
+cores is not a trivial feat, as we mentioned in Section 1.
+
+Our experiments answered two general questions with
+respect to uncongested lambda network traffic. First, we
+showed that loss occurs almost exclusively at the end-hosts
+as opposed to within the network core, typically a result of
+9
+
+• Use end-to-end forward error correction (FEC)—
+should the FEC traffic be sent and classified on a different NIC queue than the original traffic, a different CPU
+may handle the FEC traffic and recover lost packets.
+
+Historically, networks have been characterized as they
+became available—ARPANET, its successor, NSFNET [19,
+22], and the early Internet [32] have all been the focus of
+systematic measurements. Murray et. al. [27] compare endto-end bandwidth measurement tools on the 10GbE TeraGrid backbone, while Bullot et. al. [15] evaluated the
+throughput of various TCP variants by means of the standard Iperf, over high speed long distance production networks of the time (from SLAC to Caltech, to University of
+Florida, and to University of Manchester over OC-12 links
+of maximum throughput of 622Mbps)—similar to the experiments in Section 3.3.
+However, unlike our experiments, Bullot et. al. [15] focused on throughput and related metrics, like the stability (in terms of throughput oscillations), and TCP behavior while competing against a sinusoidal UDP stream. Although disregarding loss patterns and end-host behavior, the
+authors do provide insight into how the txqueuelen parameter (i.e. the length of the backlog queue between the
+IP layer and the DMA rx ring—made obsolete by NAPI)
+affects throughput stability. In particular, larger values of
+the txqueuelen are correlated with more instability. An
+equally interesting observation is that reverse-cross-traffic
+affects some TCP variants more than others, since they alter ACK delivery patterns (e.g. ACK compression due to
+queueing or loss). It is also worth noting that the authors
+perform a set of tentative TCP performance measurements
+on 10Gbps links, using jumbo (MTU of 9000 bytes) frames.
+By contrast, there has been relatively little work that
+investigates the effect of traffic patterns on the end-host,
+and the end-host’s ability to handle such traffic, especially
+for uncongested lambda networks with 10GbE end-hosts.
+Mogul et. al. [26] investigated the effect of high date
+rate traffic on the end-host, noting that a machine would
+live-lock and spend all available cycles while handling the
+interrupt service routine as a result of packets being received, only to drop these packets at the subsequent layer,
+and hence fail to make forward progress. Consequently,
+NAPI [2] and NIC on-board Interrupt Throttling have been
+widely adopted techniques to the point where they are enabled by default in vanilla kernels. On the other hand,
+an interesting study looked at how “interrupt coalescence”
+(produced by NAPI possibly in conjunction with Interrupt
+Throttling) hinders active measurement tools that rely on
+accurately estimating packet dispersion to measure capacity and available bandwidth [29]. Since the packets were
+time-stamped in user-space, context switches at the receiver
+cause similar behavior as packet batching.
+
+• Use perimeter-middleboxes—such proxies may act as
+packet caches and transparently store and re-transmit
+dropped TCP segments without requiring a copy of the
+original packet to travel across the entire network between the sender and the receiver. A trivial way of
+implementing such a perimeter-middlebox is by transparently severing the TCP connection, what is called
+TCP splitting [14] performance enhancement proxy.
+Currently we have implemented the TCP splitting performance enhancement proxy and are performing preliminary
+experiments in tandem with the Maelstrom [12] protocol
+accelerator, which performs FEC at line speed.
+
+5
+
+Related Work
+
+There has been a tremendous amount of work aimed
+at characterizing the Internet at large by analytical modeling, simulation, and empirical measurements. Measurements, in particular, have covered a broad range of metrics, from end-to-end packet delay and packet loss behavior [13, 17], to packet dispersion (spacing) experienced by
+back-to-back packets [16], packet inter-arrival time [22],
+per-hop and end-to-end capacity, end-to-end available bandwidth, bulk transfer capacity, achievable TCP throughput,
+and other general traffic characteristics [19]. However, there
+has been little work aimed at characterizing uncongested
+semi-private or dedicated networks, like modern optical
+lambda networks.
+The need for instruments with which to perform such
+measurements has led to the development of a myriad of
+tools [16, 25, 20, 21, 24, 31]. These tools are typically deployed in an end-to-end fashion for convenience, and often
+embody a tradeoff between intrusiveness and accuracy [30].
+For example, some tools rely on self-induced congestion,
+while others rely on relatively small probes consisting of
+packet pairs or packet trains. Tools like these have have
+become essential and provide a solid foundation for measurements; for example, we have saved significant time by
+working with (and extending) the existing Iperf [35].
+Not surprisingly, Internet measurements provide a snapshot of the characteristics of the network at the time the
+measurements are performed. For example, in its early
+days, the Internet was prone to erratic packet loss, duplication, reordering, and the round trip transit delays were
+observed to vary over a wide range of values [32]. Today, none of these issues remains, although other challenges
+have emerged.
+
+6
+
+Conclusion
+
+We perform an empirical study of end-to-end packet
+loss and throughput as observed on end-hosts connected
+10
+
+by high-bandwidth, semi-private, uncongested lambda
+networks—an increasingly important transport medium for
+critical data flows, including those of scientific, military,
+and financial communities. We have created the Cornell
+NLR Rings testbed to provide insight into this emerging
+type of networks. In particular, we observe that there is
+virtually no loss in the network core as it is indeed uncongested most of the time. By contrast, when loss occurs,
+it does so at the end-host. Importantly, we show that enduser perceived performance is highly dependent on end-host
+configuration, like socket buffer size, TCP window size,
+NIC interrupt affinity, NAPI, and interrupt throttling, and
+there is no “one-size-fits-all” set of parameters. Looking
+into the future, packet loss experienced by the commodity
+end-hosts could increase in severity given that the gap between network and individual CPU core speeds is growing.
+New approaches are necessary to ensure greater end-to-end
+dependability within (wide-area) lambda networks and thus
+satisfy the operational needs that user communities require.
+
+[16] R. L. Carter and M. E. Crovella. Measuring bottleneck
+link speed in packet-switched networks. Perform. Eval., 2728:297–318, 1996.
+[17] I. Cidon, A. Khamisy, and M. Sidi. Analysis of Packet Loss
+Processes in High-Speed Networks. IEEE Transactions on
+Information Theory, 39:98–108, 1991.
+[18] Cisco Systems. Buffers, Queues, and Thresholds on the Catalyst 6500 Ethernet Modules, 2007.
+[19] K. Claffy, G. C. Polyzos, and H. Braun. Traffic Characteristics of the T1 NSFNET Backbone. In INFOCOM ’93.
+[20] C. Dovrolis, P. Ramanathan, and D. Moore. What Do Packet
+Dispersion Techniques Measure? In INFOCOM ’01.
+[21] C. Dovrolis, P. Ramanathan, and D. Moore. Packetdispersion techniques and a capacity-estimation methodology. IEEE/ACM Trans. Netw., 12(6):963–977, 2004.
+[22] S. A. Heimlich. Traffic characterization of the NSFNET
+national backbone. SIGMETRICS Perform. Eval. Rev.,
+18(1):257–258, 1990.
+[23] V. Jacobson. Congestion avoidance and control. SIGCOMM
+Comput. Commun. Rev., 25(1):157–187, 1995.
+[24] M. Jain and C. Dovrolis. End-to-end available bandwidth:
+measurement methodology, dynamics, and relation with
+TCP throughput. IEEE/ACM Tr. Net., 11(4):537–549, 2003.
+[25] R. Kapoor, L.-J. Chen, L. Lao, M. Gerla, and M. Y. Sanadidi.
+CapProbe: a simple and accurate capacity estimation technique. SIGCOMM Comp. Comm. Rev., 34(4):67–78, 2004.
+[26] J. C. Mogul and K. K. Ramakrishnan. Eliminating receive
+livelock in an interrupt-driven kernel. ACM Trans. Comput.
+Syst., 15(3):217–252, 1997.
+[27] M. Murray, S. Smallen, O. Khalili, and M. Swany. Comparison of End-to-End Bandwidth Measurement Tools on the
+10GigE TeraGrid Backbone. In Proceedings of GRID ’05.
+[28] J. Padhye, V. Firoiu, D. Towsley, and J. Kurose. Modeling
+TCP throughput: a simple model and its empirical validation. SIGCOMM Comp. Comm. Rev., 28(4):303–314, 1998.
+[29] R. Prasad, M. Jain, and C. Dovrolis. Effects of Interrupt
+Coalescence on Network Measurements. In PAM’04.
+[30] R. S. Prasad, M. Murray, C. Dovrolis, and K. Claffy. Bandwidth Estimation: Metrics, Measurement Techniques, and
+Tools. IEEE Network, 17:27–35, 2003.
+[31] V. J. Ribeiro, R. H. Riedi, R. G. Baraniuk, J. Navratil, and
+L. Cottrell. pathChirp: Efficient Available Bandwidth Estimation for Network Paths. In PAM’03 Workshop.
+[32] D. Sanghi, A. K. Agrawala, O. Gudmundsson, and B. N.
+Jain. Experimental Assessment of End-to-end Behavior on
+Internet. In Proc. IEEE INFOCOM ’93.
+[33] S. C. Simms, G. G. Pike, and D. Balog. Wide Area Filesystem Performance using Lustre on the TeraGrid. In Teragrid
+Conference, 2007.
+[34] J. M. Smith, J. D. Chung, and C. B. S. Traw. Interrupts.
+In Encyclopedia of Electrical and Electronics Engineering,
+pages 667–673, 1999.
+[35] A. Tirumala, F. Qin, J. Dugan, J. Ferguson, and K. Gibbs.
+Iperf – The TCP/UDP bandwidth measurement tool. 2004.
+[36] S. Wallace. Lambda Networking. Advanced Network Management Lab, Indiana University.
+
+References
+[1] Internet2 Land Speed Record.
+http://www.
+internet2.edu/lsr/.
+[2] NAPI. http://www.linuxfoundation.org/en/
+Net:NAPI.
+[3] TeraGrid Performance Monitoring. https://network.
+teragrid.org/tgperf/, 2005.
+[4] Irqbalance. http://www.irqbalance.org/, 2009.
+[5] Ixia. http://www.ixiacom.com/, 2009.
+[6] National LambdaRail. http://www.nlr.net/, 2009.
+[7] NLR PacketNet Atlas. http://atlas.grnoc.iu.
+edu/atlas.cgi?map_name=NLR%20Layer3, 2009.
+[8] Teragrid. http://teragrid.org/, 2009.
+[9] David A. Lifka, Director, “The Center for Advanced Computing. Cornell Univ. Private Communication”, Dec 2008.
+[10] P. Wefel, Network Engineer, “The University of Illinois National Center For Supercomputing Applications (NCSA).
+Private Communication”, Feb 2007.
+[11] W. Allcock, J. Bester, J. Bresnahan, A. Chervenak, L. Liming, and S. Tuecke. GridFTP: Protocol extensions to FTP
+for the Grid. GGF Document Series GFD, 20, 2003.
+[12] M. Balakrishnan, T. Marian, K. Birman, H. Weathe‘rspoon,
+and E. Vollset. Maelstrom: Transparent Error Correction for
+Lambda Networks. In Proceedings of NSDI, 2008.
+[13] J.-C. Bolot. End-to-end packet delay and loss behavior in
+the Internet. In Proceedings of SIGCOMM ’93.
+[14] J. Border, M. Kojo, J. Griner, G. Montenegro, and Z. Shelby.
+Performance Enhancing Proxies Intended to Mitigate LinkRelated Degradations. RFC 3135, Network Working Group,
+2001.
+[15] H. Bullot, R. L. Cottrell, and R. Hughes-Jones. Evaluation
+of advanced TCP stacks on fast long-distance production
+networks. In Proceedings of the International Workshop on
+Protocols for Fast Long-Distance Networks, 2004.
+
+11
+
+

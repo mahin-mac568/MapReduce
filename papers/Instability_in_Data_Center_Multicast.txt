@@ -1,0 +1,114 @@
+Brief Announcement: Sources of Instability in Data Center
+Multicast
+Dmitry Basin
+
+Ken Birman
+
+Idit Keidar
+
+Ymir Vigfusson
+
+Technion
+Haifa, Israel
+sdimbsn@tx.technion.ac.il
+
+Cornell University
+Ithaca, NY
+ken@cs.cornell.edu
+
+Technion
+Haifa, Israel
+idish@ee.technion.ac.il
+
+IBM Research, Haifa Labs
+Haifa, Israel
+ymirv@il.ibm.com
+
+Categories and Subject Descriptors
+C.2.4 [Computer Communication]: Distributed Systems
+
+General Terms
+Reliability, Theory
+
+Keywords
+multicast, TCP overlay, data center
+
+1. INTRODUCTION
+Data centers, and particularly the massive ones that support cloud computing, e-commerce, social networking and
+other large-scale functionality, necessarily replicate data. Our
+basic premise is that since updates to replicated data can be
+thought of as reliable multicasts, data center multicast is a
+potentially important technology. Nonetheless, a series of
+recent keynote speeches at major conferences makes it clear
+that data center multicast is a troubled area [4, 2]. One
+might expect such technologies to use IP multicast hardware, but in fact this is rare. Only TCP is really trusted
+today (because it backs down when loss occurs), and indeed,
+TCP is the overwhelming favorite among data center transport protocols [3]. Using TCP to get reliable multicast with
+high throughput produces an implicit TCP overlay tree.
+
+2. MODEL AND RESULTS
+We analyze the use of TCP overlay trees for reliable multicast using a novel model. The key property we capture is
+that nodes can experience disturbances, such as Java garbage
+collection pauses, Linux scheduling delays or flushing data
+such as logs to disk. Disturbances prevent nodes from forwarding packets, for instance when the application thread
+does not respond or when packets do not reach the node
+because of a link problem. By modeling disturbances we
+capture dependencies among delays of messages that arrive
+close together. This differs from traditional models, which
+simply assume that message delays are independently sampled from some distribution (often exponential).
+In our full paper [1], we make the following contributions.
+First, we find that TCP overlays trees that experience infrequent, short disturbances of a tenth of a second or less may
+cause significant (up to 90%) throughput degradation once
+Copyright is held by the author/owner(s).
+PODC’10, July 25–28, 2010, Zurich, Switzerland.
+ACM 978-1-60558-888-9/10/07.
+
+trees become large (104 -105 nodes; a size not unreasonable
+in cloud settings). The degradation occurs even if message
+loss is negligible. Under default TCP configurations in lowlatency networks, message loss can cause problems also in
+very small trees: we demonstrate that multicast throughput
+collapses with as few as 30 − 100 nodes if switches become
+congested. Even when buffer sizes are increased to 2MB per
+connection (32-fold increase), the degradation is still 15–30%
+in both scenarios.
+Next, assuming that processing delays follow a powerlaw distribution, we argue that irrespective of the reliability
+scheme used, the delivery latency scales almost linearly in
+the number of receivers.
+
+3.
+
+CONCLUSION
+
+Our analysis and simulations explain why overlay trees
+built from reliable peer-to-peer links are quite likely to perform poorly, at least if implemented naı̈vely. We are not
+claiming that data center multicast must inherently be slow;
+indeed, approaches to overcome the limitations shown by our
+analysis exist. Rather, our goal is to address the discrepancy
+between optimistic theoretical predictions and the dire results obtained in the real world: we show that infrequent
+short disturbances, which were never modeled or simulated,
+can lead to correlated delays and be extremely disruptive
+in the context of a reliable protocol. We achieve this by
+refining the theoretical model for reasoning about such systems so as to capture phenomena that have a severe impact
+on performance in practice, and were previously overlooked.
+This approach, in turn, can be used to analyze future work
+that remedy the problems we highlight.
+
+Acknowledgments
+This work was supported, in part, by the Technion Funds for
+Security Research, by the Israeli Ministry of Industry, Trade and
+Labor Magnet Consortium and grants from the NSF and AFRL.
+
+References
+[1] D. Basin, K. Birman, I. Keidar, and Y. Vigfusson. Sources of
+instability in data center multicast, May 2010. Submitted for
+publication.
+[2] A. Greenberg. Networking the cloud, July 2009. Keynote
+address at ICDCS 2009, Montreal, Canada.
+[3] A. Greenberg, J. Hamilton, D. A. Maltz, and P. Patel. The
+cost of a cloud: research problems in data center networks.
+SIGCOMM Comput. Commun. Rev., 39(1):68–73, 2009.
+[4] M. Theimer. Some lessons learned from running Amazon Web
+Services, October 2009. Keynote address at LADIS 2009, Big
+Sky, Montana.
+
+

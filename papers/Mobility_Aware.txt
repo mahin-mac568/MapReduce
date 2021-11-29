@@ -1,0 +1,1387 @@
+Mobility-aware adaptation for transport protocols
+Benjamin Atkin and Kenneth P. Birman
+Department of Computer Science
+Cornell University, Ithaca, NY
+batkin,ken @cs.cornell.edu
+
+
+February 1, 2002
+
+Abstract
+
+and compares their performance in a variety of scenarios.
+We focus on message-oriented communication, since apApplications on mobile computers must adapt to high variabil- plications such as web browsers or remote filesystem clients
+ity in wireless network performance. Extending the semantics commonly send and receive objects of various sizes, rather
+of transport protocols to offer more control over communica- than streams of data. Three approaches are considered: two
+tion to the user allows applications to adapt their behavior to based on extending TCP at the application level, and one new
+variability. We examine adding priorities and deadlines to data transport protocol which runs over UDP. Though TCP is alobjects as a method for achieving greater application control. most ubiquitous, application adaptation to network behavior
+Priorities allow the application to control the transmission or- over TCP can be awkward to implement, since TCP automatder of objects, while deadlines permit the transport protocol ically and transparently adapts to bandwidth variations. Transto inform the application if there is insufficient bandwidth for mitting multiple data objects requires choosing how many TCP
+delivery. We compare three implementations of priorities and connections to use: a single connection forces serial transmisdeadlines, two extending TCP at the application level, and one sion, whereas multiple connections can compete unpredictably
+new protocol, ATP, which runs on top of UDP. Experiments for bandwidth. Our basic extension of TCP with deadlines
+show that ATP and the TCP extensions perform comparably in uses a single connection, and the more advanced variant uses
+many cases, but ATP outperforms TCP for some workloads, multiple connections dedicated to specific object priorities.
+including a workload simulating remote filesystem traffic.
+Our third protocol does not rely on TCP. The Adaptive
+Transport Protocol (ATP) is designed to fulfill the same role as
+TCP within a local area network, and incorporates additional
+1 Introduction
+semantics for mobility-awareness. An application using ATP
+is informed of the state of the network as it changes, and can
+Mobile hosts in wireless networks can frequently experience
+use this information to decide which data to send, adjust privariable network performance, due to local interference, conorities, and suspend, resume or cancel ongoing data transmistention from other hosts, or distance from a base station. Since
+sions in response to bandwidth changes. ATP autonomously
+this variability is more prevalent and more unpredictable than
+decides how to schedule data objects for transmission, based
+in wired networks, applications written for mobile hosts should
+on bandwidth availability, and notifies the application by an
+be capable of adapting to changes in network behavior. For inupcall if an object cannot be transmitted within the expected
+stance, an application could rely heavily on the network when
+time. Our experiments show that ATP performs comparably
+connectivity is good, but scale back its communication if conto the TCP variants for many workloads. We have identified
+nectivity degrades. Adaptation of this sort requires a greater
+a class of workloads, including remote file access, where ATP
+degree of information and control than is offered by the Transsignificantly outperforms TCP.
+mission Control Protocol (TCP) and the BSD socket interface.
+The structure of the rest of this paper is as follows. SecThe addition of deadlines to the transmission of data objects
+tion 2 gives an overview of ATP, its semantics, and how it difallows a transport protocol to inform the application if bandfers from TCP. Section 3 describes our implementation and the
+width is insufficient to deliver an object. Adding priorities alalgorithms used by the protocol, as well as discussing some exlows the application to control how the transport protocol uses
+amples of execution. Section 4 compares the performance of
+the available bandwidth. This paper explores alternatives for
+ATP to TCP, and user-level extensions of TCP, in a series of
+implementing priorities and deadlines in the transport protocol
+experiments. Section 5 surveys related work, while section 6
+The authors were supported in part by DARPA/AFRL-IFGA grant F30602concludes and describes our plans for future work.
+99-1-0532 and in part by NSF-CISE grant 9703470, with additional support
+from Microsoft Research and from the Intel Corporation.
+
+1
+
+application
+
+network
+scheduler
+
+application
+
+object queue
+N N−1
+1
+...
+
+object queue
+N N−1
+
+1
+...
+
+object queue
+N N−1
+1
+...
+
+bandwidth
+estimator
+
+endpoint
+
+endpoint
+
+endpoint
+
+Figure 1: ATP architecture. Applications communicate with ATP by requesting to send objects. Remote hosts are identified by local endpoints
+(similar to BSD sockets), and each application owns one or more object queues from which the scheduler chooses objects to transmit.
+
+2 Overview of ATP
+
+Data objects can be of arbitrary size. ATP handles fragmentation and reassembly of large objects.
+ATP is a reliable, message-oriented transport protocol. It imFigure 1 illustrates ATP’s structure. ATP is implemented
+plements its own rate-based flow control scheme and retrans- as a library which applications link with, running at user level
+missions using selective acknowledgements. ATP incorporates over kernel UDP. A future version may be incorporated into
+bandwidth estimation through a combination of throughput the kernel for greater efficiency. We describe ATP’s interface
+readings from the network card and a packet-pair estimate.
+and differences from TCP in detail in subsequent sections.
+The protocol is most suited for use by applications running
+on a mobile host, but communicating with remote hosts, in
+2.1 ATP interface
+a way which permits trade-offs between communication and
+data quality. For instance, a web browser might request de- The basic ATP interface is quite similar to the BSD socket
+graded images to conserve bandwidth, or a file system might interface, as shown in Figure 2. Though its aims are differreduce prefetching or defer writing back cached files. In the ent, the interface and general architecture of ATP also have
+Odyssey system [21], these techniques are termed “data fi- considerable similarities to U-Net [29] and VIA [28], incordelity”, and applications change modes of operation based on porating the same mechanisms of endpoints, message queues
+the available bandwidth. ATP generalises this approach, al- and asynchronous send operations. To initiate communication
+lowing the application to choose the mode it runs in according with another host, an application calls endpoint, supplying
+to bandwidth, but also masking transient variability in band- the host’s name or IP address, and receives an endpoint identiwidth by doing its own, finer-grained adaptation.
+fier. Alternatively, a server program can use accept to wait
+ATP replaces TCP for communication within a local area for new clients to begin communicating, which also returns an
+network. Balakrishnan et al [3] have demonstrated that perfor- endpoint identifier.
+mance improvements in TCP can be achieved by augmenting
+Objects are sent by a blocking or non-blocking call, which
+the protocol with knowledge of the wireless link. We take a takes an object and an options field as arguments. Options
+similar approach, but we change the transport protocol seman- encapsulate the optional priority and deadline for delivery of
+tics, as well as specialising the implementation. While this an object. A priority is chosen from a finite range, and a
+prevents an ATP-enabled host from communicating with hosts deadline specifies the maximum number of milliseconds beon an outside WAN, the limitation can be rectified by interpos- tween receipt of the object by ATP and the time when the
+ing an intermediary ATP-to-TCP gateway.
+protocol should stop attempting to send it and report a failTo communicate with another host, an application creates ure. Each send operation is given a request identifier, which
+a local “endpoint” to identify the destination, and then makes can be passed to reqctl in order to examine or modify the
+calls to send data objects. Sending an object can be either a request while it is in progress. Permitted commands are to
+blocking or non-blocking operation, so that an application can check the amount transferred, cancel the request, suspend the
+have multiple concurrent send operations outstanding at one transfer, restart the transfer, or change its priority or deadline.
+time. To aid ATP in deciding the order to send messages in, The recv call blocks waiting for a data object to arrive at the
+sends can be tagged with a priority and an advisory deadline. endpoint.
+
+2
+
+eid t endpoint(char* hostname, short port)
+Create an endpoint to allow communication with a remote host.
+int send sync(eid t dest, data t* obj, options t* opts, req t* req)
+Send an object, blocking until transmission completes.
+req t send async(eid t dest, data t* obj, options t* opts, callback t cb)
+Send an object, returning immediately. ATP invokes the callback on send completion or an error.
+eid t accept()
+Wait for communication to be initiated with the application.
+int recv(eid t from, data t* obj)
+Receive an object from the specified endpoint.
+int callback(callback t cb, int low, int high)
+Register a callback to be invoked by ATP if bandwidth availability is outside specified bounds.
+int reqctl(req t req, command t* cmd, options t* opts)
+Change parameters or behavior of an incomplete send operation.
+Figure 2: The ATP interface. An eid t is an endpoint identifier, and an options t encapsulates a priority and deadline. Priorities are
+specified from a finite, discrete range, while deadlines are a number of milliseconds, or zero, indicating no deadline.
+
+raises the possibility of starvation, which is discussed in the
+next section.
+The problem of choosing the order in which to send objects
+is similar to real-time CPU scheduling [19], and the scheme
+we have implemented is a refinement of the Earliest-Deadline
+First algorithm. We recognise that a case could be made for a
+more elaborate scheduling policy. However, the current ATP
+policy permits high-priority objects to block transmission of
+low-priority objects, whereas many priority-based schedulers
+opt to reserve a fraction of system resources for low-priority
+tasks. A greater degree of sophistication lies beyond the scope
+of our prototype, though the ATP scheduling module could
+easily be replaced with a different mechanism. One possible
+addition to the scheduler would be support for precedence constraints to refine the order in which objects are scheduled.
+A simple application such as a web browser might choose
+to use ATP as follows: web pages are retrieved at a high priority, and embedded images are retrieved at a lower priority. As
+the available bandwidth decreases, the amount of bandwidth
+2.2 Priorities and deadlines
+devoted to retrieving web pages will remain constant for as
+The interaction of priorities, deadlines and bandwidth is con- long as possible, while image bandwidth will decrease. Deadceptually straightforward. Objects larger than the network’s lines can be set for images to automatically prune an image
+Maximum Transmission Unit (MTU) are sent in fragments, request after a certain period of time has passed without the
+and the next fragment to send is selected based on priorities image being retrieved. Naturally, there is no reason to put all
+and deadlines of objects. ATP always selects a fragment from images at the same priority, headings or image maps might
+among the objects with the highest priority. If there is more be put at a higher level than inessential images. While ATP
+than one object with that priority, it will choose a fragment does not provide a byte stream interface, streaming data can
+from the object with the earliest deadline. Objects are ranked be mimicked by a suitable choice of deadlines for some diviby the order in which they will be sent, and a simple procedure sion of the stream into objects, and relying on ATP’s internal
+determines whether delivery of an object is possible with the deadline ordering.
+current bandwidth (we defer discussion of this algorithm until
+section 3). If the deadline for an object cannot be satisfied, its
+2.3 Object queues
+callback is invoked and its transmission is suspended. Using
+object priority to select fragments for transmission naturally In practice, a scheme as simple as we have described is of restricted value. While it is useful for an isolated application,
+1 Callbacks are superfluous for blocking send operations, since they can
+with
+multiple applications, it is possible for a single one to
+simply return with an error code.
+These functions can be augmented by the addition of callbacks, which allow ATP to notify the application of exceptional conditions. The callback function registers a callback routine which ATP will invoke when the bandwidth strays
+outside the interval specified in the arguments to callback.
+The application-supplied routine can then make adjustments
+based on the new bandwidth level, and potentially re-register
+with new bandwidth bounds. ATP employs hysteresis to prevent a cascade of callback invocations when the bandwidth
+is unstable. Non-blocking send operations1 can also be accompanied by a callback function, which is invoked when the
+transfer completes, or on an exceptional condition (insufficient
+bandwidth to complete request, deadline expired, and so on).
+The addition of callbacks makes ATP object deadlines “advisory”: if an object cannot be delivered within its deadline, the
+application receives a callback, and can decide to terminate the
+transfer, or set a new deadline.
+
+3
+
+3 Implementation
+
+exploit the system by placing all its objects at the highest priority. It also forces objects which share the same priority to be
+transferred serially, so the turnaround time for transfers can be
+unpredictable. To overcome this problem, ATP incorporates an
+object queue mechanism, under which each application begins
+with a separate queue. An application can create additional
+object queues for more flexibility in its data transfers. Considered in isolation, a single object queue behaves exactly as
+described earlier. ATP allocates bandwidth among the individual queues according to the priorities of messages at the head
+of each queue. In this way, an application is able to get a share
+of the bandwidth, even if its objects use a lower priority level
+than those sent by other applications. We do not describe the
+object queue mechanism in detail in this paper, since its implementation is incomplete in the current version of ATP, and
+techniques for bandwidth division among concurrent streams
+are already well studied [4, 23].
+
+Having explained how ATP behaves, we now describe some
+of the implementation in more detail. Our initial implementation of ATP is on FreeBSD 4.2, and amounts to approximately
+seven thousand lines of C code. Three areas are of particular interest: the bandwidth estimation mechanism, the network
+scheduler for sending data, and how ATP reacts to changes in
+bandwidth.
+
+3.1 Bandwidth estimation
+
+A mechanism for estimating bandwidth is a necessary component of an adaptive transport protocol, since both the application and the protocol itself rely on this value in order to adapt
+appropriately. ATP incorporates a bandwidth estimator to determine how much data it should send each second. Much
+work has been devoted to the general problem of estimating
+bandwidth for flows in a wide-area network [16]. However,
+2.4 Comparison of ATP and TCP
+bandwidth estimation for ATP has some crucial differences
+ATP provides a number of innovations over TCP and the socket from the traditional problem, which make it both easier and
+interface, since it intentionally exposes network behavior to more difficult.
+applications, whereas TCP transparently adapts. We describe
+three areas in which ATP differs significantly.
+Bandwidth estimator requirements
+Three-way handshakes and slow start on connection establishment make TCP an inefficient protocol for transmitting Wide-area bandwidth estimation schemes must arrive at an essmall objects. An ATP endpoint is created when the first object timate of limiting bandwidth, which lies at some link along
+is sent to a destination, and persists until explicitly destroyed, the path between a sender and receiver. In contrast, we assume
+or until it is idle and can be garbage-collected to free memory. that the rate of communication is principally limited by the
+ATP improves on TCP in the amount of information and bandwidth on the wireless link. Since all communication becontrol over object transmission given to the application once tween the mobile host and remote hosts must be over this link,
+a send is initiated. A TCP send operation is irrevocable, unless we can estimate the total bandwidth available on it, rather than
+the connection is broken, and there is no easy way of finding deriving separate estimates for each connection or destination
+out how much of a large object has been transmitted before the host. In the prototype, we assume that traffic from protocols
+connection breaks. The only way to immediately terminate an other than ATP constitutes a negligible fraction of the total
+active TCP connection is with the shutdown call, and send traffic.
+A further important difference is a side-effect of ATP seoperations cannot be interrupted. ATP allows send operations
+mantics.
+Since ATP incorporates priorities for objects, an into be deferred, so they can be resumed even after a temporary
+accurate
+estimate
+can cause a priority inversion. The difficulty
+disconnection, without any need for the application to check
+lies
+in
+the
+network
+card’s device driver buffering datagrams
+how much of the object has already been transmitted.
+when
+it
+is
+unable
+to
+transmit
+as fast as the incoming rate. If an
+Finally, since ATP allows a priority and a deadline to be
+over-optimistic
+bandwidth
+estimate
+causes the kernel to buffer
+specified when an object is sent, it can favor some objects over
+datagrams
+from
+low-priority
+objects,
+these will hold up the
+others when deciding how to allocate network bandwidth. If
+transmission
+of
+datagrams
+from
+high-priority
+objects until the
+TCP is used with a single connection for multiple objects, then
+send
+queue
+is
+free
+of
+low-priority
+datagrams.
+It is impractical
+the objects must be sent sequentially, regardless of priorities
+to
+remove
+datagrams
+from
+the
+send
+queue,
+but
+some operating
+or deadlines. If multiple connections are used, then they will
+systems
+allow
+the
+length
+of
+the
+queue
+to
+be
+read
+by applicacompete for bandwidth, with potentially unpredictable results
+tions
+(for
+instance,
+by
+FreeBSD’s
+ifmib
+feature).
+The ATP
+— in the best case, all the connections will receive an equal
+bandwidth
+estimator
+incorporates
+a
+mechanism
+to
+“back
+off”
+share of the bandwidth, but the bandwidth allocation will not
+and
+reduce
+its
+estimate
+when
+it
+detects
+a
+backlog
+in
+the
+send
+necessarily remain stable. As a simpler alternative to ATP’s
+deadlines and priorities, one of the extensions to TCP in our queue.
+experiments uses a variant of the multiple-connection scheme.
+
+4
+
+int curbw;
+int pp_timer = 0;
+int pp_period = MAXIMUM_PACKET_PAIR_PERIOD;
+packet_pair(n_objects_rejected) {
+pp_timer++;
+if (pp_timer == pp_period) {
+curbw = send_packet_pair();
+if (n_objects_rejected > 0)
+pp_period - maximum(pp_period-1, 0);
+else
+pp_period = minimum(pp_period+1,
+MAXIMUM_PACKET_PAIR_PERIOD);
+}
+return curbw, curbw;
+}
+
+bandwidth_estimate(used, backlog) {
+used = maximum(used, filter(used));
+if (backlog > MAXIMUM_BACKLOG) {
+curbw = used;
+return (used, used - backlog*MTU);
+}
+else if (used < curbw)
+return (curbw, curbw);
+else {
+curbw = used;
+return (curbw, curbw + PROBE_SIZE);
+}
+}
+
+Figure 3: The bandwidth estimation algorithm. Every second, the bandwidth estimator calls one of two functions, depending on whether
+the bandwidth estimate is stale (for brevity, we omit the staleness calculation). If it is not stale, bandwidth estimate is called, and
+returns the curbw and available values. If it is stale, packet pair is called instead, which may or may not result in a packet-pair
+measurement, depending on the value of the internal timer. The filter function averages used with its four preceding values.
+
+munication over the wireless link, and operates independently
+from the rest of the protocol. TCP adjusts the window size
+A naive scheme for bandwidth estimation is to count how many
+for a connection to match the bandwidth-delay product along
+send operations, and of what sizes, complete over an interval,
+the path, and relies on the rate at which acknowledgements arand divide to find the estimate. This can be inaccurate because
+rive to trigger changes in the window size. The generality rethe kernel buffers data, both at the protocol level (in the case
+quired of TCP’s window size adaptation mechanism precludes
+of TCP – UDP does no buffering), and at the network device
+deriving a bandwidth estimate for the mobile host’s outgoing
+driver. Additionally, the time required to derive an estimate
+interface.
+depends on the amount of data being sent. Blocking on a send
+Estimation in ATP relies on three statistics: the observed
+operation for a large object will delay the estimate until the
+bandwidth, the length of the network interface send queue, and
+send completes. For an unreliable protocol such as UDP, the
+the staleness of its current estimate. Staleness measures the
+naive scheme is doubly inadequate, since the network device
+number of seconds since the last point at which the estimate
+driver discards excess packets silently.
+changed, or since there was a “genuine decrease” in available
+Fortunately, most operating systems allow data on network
+bandwidth. A genuine decrease can be distinguished from a
+characteristics to be obtained from the network interface. We
+decrease in the count of bytes transmitted by detecting that
+can poll the network interface periodically for its count of
+the length of the send queue has increased (in fact, we check
+bytes transmitted and received, and calculate the amount of
+that
+it exceeds a threshold of ten packets; the maximum length
+bandwidth used since the last poll2 . This approach has two
+allowed is fifty).
+obvious shortcomings: bandwidth over the previous interval is
+Figure 3 shows pseudocode for the bandwidth estimation
+not a guaranteed indicator of the bandwidth during the curalgorithm. It runs once every second, and computes two valrent interval, and the estimate is necessarily constrained by
+ues based on the statistics obtained over the previous second:
+the amount of data actually sent. The latter objection is the
+curbw and available. The curbw value is the estimate
+more serious one, since any estimate is by necessity based on
+of available bandwidth on the wireless link, which is used by
+past values. We rectify it by a combination of two approaches:
+ATP, as well as being supplied to the application. The avail“probing” the available bandwidth, by speculatively increasing
+able value is the amount of bandwidth which ATP should rethe rate at which ATP can send, and by a simplified packet-pair
+strict itself to using over the next second. This is an internal
+mechanism [5, 13, 22], if the current estimate is known to be
+ATP statistic, which may be lower than curbw if the network
+inaccurate, and a new one is required by the application.
+interface send queue is nonempty and there is a consequent
+risk of priority inversion. An averaging filter with a constant
+The bandwidth estimation algorithm
+window size is used to smooth curbw in order to make it less
+sensitive
+to transient spikes.
+ATP’s bandwidth estimator has similarities to TCP window
+The
+bandwidth
+estimator maintains its estimate by adjustsize adaptation, though it derives a single estimate for all comments based on the count of bytes sent and received over the
+2 Our network card provides other statistics, such as signal strength and sigpreceding second, and using a packet-pair measurement. Unnal quality, but these do not have a straightforward relationship to the available
+der normal circumstances it relies on the former, calling bandbandwidth.
+Overview of the bandwidth estimator
+
+5
+
+3.2 Endpoints and the network scheduler
+
+width estimate with the bandwidth usage and backlog
+(send queue length) reported by the kernel. If the backlog is
+nontrivial, curbw is reduced to the bandwidth reported, and
+available is reduced so as to clear the backlog. Otherwise,
+if the reported bandwidth exceeds curbw, then curbw is adjusted and available is speculatively increased by a constant in the expectation that the true bandwidth has not been
+attained. If the increase overshoots the true bandwidth, then
+the estimate will be rectified in the next second. The degree of
+the increase is limited by half the maximum send queue length
+times the MTU, but is reduced when the bandwidth estimate is
+very small.
+
+The network scheduler component of ATP deals with objects,
+not with individual packets. Each endpoint contains the data
+structures to handle transmission of objects to its corresponding remote host: this includes object data, and send and receive windows for packets. Our endpoint implementation uses
+a positive acknowledgement scheme, combined with selective acknowledgements to limit retransmissions when multiple
+packets are lost.
+The operations of individual endpoints are transparent to
+the network scheduler, which just identifies the object which
+needs to be transmitted most urgently, and asks the endpoint
+managing that object to supply a packet. It is up to the endpoint to decide whether to retransmit a previous packet, or to
+supply a packet from the object the network scheduler has selected. When a packet arrives from the remote host, the network scheduler delivers it to the endpoint, which may adjust its
+send and receive windows accordingly. If a packet acknowledges the successful transmission of an object, then the endpoint informs the network scheduler. ATP then notifies the
+application that the object has been delivered to the receiver.
+The scheduler uses the available value provided by the
+bandwidth estimator to decide how many packets to send over
+the course of a second. It divides the estimate by the network
+MTU to get a packet count, and then determines from this how
+many packets it can send during each 50 millisecond “send interval”. In this way, packet sends are staggered throughout the
+second to prevent the device driver queue discarding packets.
+Of course, if there are no objects available to be sent, the network scheduler is idle. It may also remain idle if the endpoints
+it polls refuse to supply packets to send, as they might if their
+send windows are full and they have no packets to retransmit.
+Under normal circumstances, this is an infrequent occurrence,
+since endpoints set their window sizes large enough to ensure
+that the bandwidth estimate, not the window size, is the limiting factor in the rate of transmission.
+
+Packet-pair estimation
+The packet pair routine is only used if the current estimate
+is known to be stale: this is equivalent to staleness exceeding
+a small threshold (five seconds in our implementation). In this
+case, the bandwidth estimator sends a pair of marked, MTUsize packets to a remote host, with no pause between the send
+calls. The receiving host measures the inter-arrival time of
+the packets and sends this value in a reply. The reciprocal of
+the inter-arrival time gives an order-of-magnitude estimate of
+the available bandwidth. The period between packet-pair estimates is adjusted using a simple heuristic: if a stale bandwidth
+estimate is causing objects to be rejected, then the period is
+decremented following every measurement; otherwise, it is incremented. While Figure 3 implies that send packet pair
+returns to the bandwidth estimator and execution resumes, in
+fact the bandwidth is only updated if and when the reply packet
+arrives.
+Even though the inter-arrival time estimate can be quite inaccurate, it is useful in breaking a particular kind of deadlock
+which arose in an early version of ATP. The problem was as
+follows: if bandwidth fell to a low enough level, the network
+scheduler began to reject objects because their deadlines were
+too tight. As a result, ATP ceased transmitting objects and
+bandwidth estimate was unable to recognise an increase
+in the available bandwidth, since the reported byte count was
+stuck at zero. The addition of packet-pair estimates solved
+this problem. An alternative approach would be to speculatively accept objects even when their deadlines appear to be
+unsatisfiable, anticipating that the true available bandwidth is
+sufficient to transmit them. This approach was rejected as too
+wasteful when the estimate was correct, and it is also antisocial, since it could interfere with other hosts on the network
+when conditions are poor. While our packet-pair estimate is
+less accurate, gross errors can be rapidly corrected, once the
+next byte count from the network card is obtained. The interaction of the bandwidth estimator and the object admission
+scheme is described in a following section.
+
+3.3 Controlling object admission
+In the overview of ATP, the priority and deadline features were
+described from the application’s perspective. Under normal
+circumstances, the interaction of object priorities and deadlines is exactly as outlined: as long as bandwidth is adequate,
+priority is the most important criterion for deciding which object will be sent. Among objects of the same priority, the
+object with the closest deadline will be sent first. The effect
+is that high-priority objects are sent whenever possible, with
+lower-priority objects filling in the idle time when no highpriority objects are available.
+Ensuring that objects are delivered within their deadlines
+requires some extra work. A notion of deadline safety is used
+to decide when objects should be tagged as undeliverable, and
+
+6
+
+192
+
+192
+
+estimate
+used
+bandwidth
+
+160
+data rate (kbytes/sec)
+
+data rate (kbytes/sec)
+
+160
+
+estimate
+used
+bandwidth
+
+128
+
+96
+
+64
+
+32
+
+128
+
+96
+
+64
+
+32
+
+60
+
+120
+
+180
+time (secs)
+
+240
+
+300
+
+60
+
+(a)
+
+120
+
+180
+time (secs)
+
+240
+
+300
+
+(b)
+
+Figure 4: ATP behavior for different workloads. Graph (a) shows bandwidth usage for a workload of 64 KB objects, entering the system
+every quarter of a second, with deadlines of one second. When bandwidth is less than 64 KB/s, no objects are admitted. Graph (b) shows a
+combination workload of high-priority 4 KB objects and low-priority 256 KB objects with long deadlines.
+
+120 and 220 seconds, almost no objects are admitted, since
+the bandwidth estimate is below 64 KB/s. Admission ceases
+when the estimate is in the vicinity of 64 KB/s, and resumes
+when the estimate has jumped to 140 KB/s from 48 KB/s.
+An anomaly is evident at 193 seconds, where the estimate
+jumps sharply due to an inaccurate packet-pair calculation;
+even though this causes some objects to be incorrectly admit
+ted, it is quickly rectified. The accompanying spike, at which
+The  values are calculated
+in sequence as each object is ex
+more data than the available bandwidth is reported as sent, apamined, and if a particular  value is found to exceed curbw,
+pears to be an inaccuracy in Dummynet.
+then an “insufficient bandwidth” upcall for the corresponding
+Graph (b) shows a mixed workload, with both high-priority
+object  is made. It is up to the application to decide whether
+and low-priority objects. Every 0.5 seconds, a high-priority,
+to abort the object transfer or to defer it until the bandwidth
+4 KB object with a 1-second deadline enters the system; evimproves (this course might be preferable if the object has alery 8 seconds, a low-priority, 256 KB object with a 16-second
+ready been partially transferred).
+deadline enters. The spikes in the reported bandwidth curve
+Deadline safety is checked when the value of curbw deindicate these larger, low-priority objects. The combination of
+creases.
+optimisation, the deadline check stores the final
+  valueAsforanlater
+smaller objects and looser deadlines allows ATP to make use
+comparison against curbw, which remains
+of the period between 180 and 210 seconds when bandwidth
+valid until a new object has been accepted for transmission.
+is at 50 KB/s.
+ATP also controls the admission of new objects by running the
+The use of the bandwidth estimate for object admission is
+deadline-safety check as though a candidate object was already
+illustrated in Figure 5, which shows part of an execution of
+added. The new object is rejected if deadline safety requires
+the same workload as in Figure 4(b). Events at the sender are
+that its addition would cause another object of the same priorshown at the left, and at the receiver on the right. Arrows inity, but a later deadline, to be discarded.
+dicate the correspondence between the entry of objects into
+the system and their delivery to the receiver. The small, high3.4 Examples of ATP execution
+priority objects arrive every 0.5 seconds, while a large object
+To place the preceding algorithms in context, we examine some arrives every 8 seconds. The decreasing bandwidth estimates
+representative executions of ATP. Figure 4 shows bandwidth correspond to the system entering the zero-bandwidth region
+estimates for two examples of ATP execution. The actual band- of Figure 4(b). The interval between arrival of a small object
+width curves are synthetic, and were generated with the use and its delivery lengthens as bandwidth decreases, and some
+of the Dummynet traffic-shaping module [25] (the bandwidth small objects are dropped due to their deadlines expiring. It
+is worth noting that some arrival-delivery intervals are greater
+curves are explained in more detail in section 4).
+Graph (a) shows the bandwidth curves when the system than one second, the nominal deadline, but this is due to the
+is saturated: every 0.25 seconds, a new 64 KB object enters deadline only being enforced at the sender’s side, not at the rethe system, and must be delivered within a second. Between ceiver, in order to avoid a requirement for clock synchronisathe application notified. The sequence of objects is deadlinesafe if a scan of the objects in their expected transmission order
+calculates that the bandwidth required is no more than the current estimate. The bandwidth required to deliver object  is
+given by
+     size  
+deadline 
+
+7
+
+small 286
+small 287
+large 288; small 289
+small 290
+bandwidth 54005
+small 291
+small 292
+bandwidth 41592
+small 293
+small 294
+bandwidth 38612
+small 295
+small 296
+bandwidth 38612
+small 297
+small 298
+bandwidth 30906
+small 299
+small 300
+bandwidth 29297
+small 301
+small 302
+bandwidth 29297
+small 303
+small 304
+bandwidth 20682
+large 305 rejected; small 306
+small 307
+bandwidth 21266
+small 308
+small 309
+bandwidth 21266
+small 310
+bandwidth 288 2
+bandwidth 14479
+
+bandwidth 54005
+
+bandwidth 14181
+
+136.064
+136.564
+137.054
+137.554
+138.064
+138.554
+139.064
+139.564
+140.064
+140.566
+141.056
+141.566
+142.064
+142.564
+143.064
+143.554
+144.064
+144.564
+145.064
+145.554
+146.064
+146.554
+147.054
+147.476
+
+136.215 delivered 286
+136.675 delivered 287
+137.275 delivered 289
+138.245 delivered 290
+139.277 delivered 291
+139.605 delivered 292
+140.365 delivered 294
+140.696 delivered 295
+141.115 delivered 296
+142.176 delivered 297
+142.546 delivered 298
+143.416 delivered 300
+143.706 delivered 301
+144.406 delivered 302
+
+146.646 delivered 307
+147.036 delivered 308
+147.786 delivered 309
+
+bandwidth 310 1 148.455
+
+bandwidth 11237
+bandwidth 7984
+151.203 cancelled 288
+
+bandwidth 5287
+
+Figure 5: Timeline of ATP execution. The section shown is from the execution of the same workload as shown in Figure 4(b). Entry points of
+objects into the system are denoted by “small” (high-priority, 4 KB) or “large” (low-priority, 64 KB), followed by a sequence number. The
+per-second bandwidth estimate is given in grey (each estimate is computed at the time marked by the line above it). Arrows indicate when
+sending an object commences at the sender and receipt occurs at the receiver. Objects after 148.5 seconds, and removal of objects due to
+deadlines, have been omitted – an object without an arrow was dropped due to a deadline.
+
+tion. While the bandwidth is technically sufficient for delivery
+of all the small objects shown on the timeline, a clamp-down
+on the available value after 138 seconds leads to some objects exceeding their deadlines. Insufficient bandwidth at 145
+seconds causes a new 256 KB object to be rejected, and the
+256 KB object admitted at 137 seconds is discarded due to insufficient bandwidth at 147 seconds, before its deadline has
+expired. The fact that the notification of cancellation arrives
+at the receiver four seconds later is due to the backlog in the
+device driver send queue. Slow delivery of cancellation notifications is tolerable because their purpose is to free buffer
+space at the receiver.
+
+tached directly to the switch. The sender was an 800MHz
+Pentium III laptop, also running FreeBSD 4.2, and communicating through an Aironet wireless Ethernet card. The advertised throughput of the Aironet card is 11 Mbps, though “in
+the field” we never saw more than 4.9 Mbps. Under controlled
+conditions, when there were no obstructions or major sources
+of interference between the card and base station, data rates of
+between 5.6 and 7.4 Mbps were observed.
+In order to achieve repeatable results for experiments, we
+used the FreeBSD Dummynet traffic shaping module [25]. Using Dummynet, we controlled the available bandwidth at the
+sender according to a trace file. Originally we used traces of
+real throughput measurements (obtaining results similar those
+presented by Noble et al [22]), but we found these to be too
+chaotic to permit a straightforward analysis of our results. Accordingly, we used a simplified, synthetic bandwidth trace to
+emulate network behavior, already shown in Figure 4.
+
+4 Experiments
+We compared the performance of ATP to TCP in two sets of
+experiments: first, the performance for bulk data transfer was
+measured, without making use of ATP’s augmented semantics,
+and second, ATP and TCP were compared for a number of
+workloads incorporating deadlines and priorities. We describe
+the experimental setup and methodology before presenting the
+results of the experiments.
+
+4.2 Experimental methodology
+Each experimental workload was in the form of a trace file of
+object descriptions (size, priority, deadline) and inter-arrival
+delays between objects. Regardless of the protocol used, each
+test program maintained an internal counter to determine when
+new objects should enter the system.
+Comparing TCP and ATP using a workload that incorporates deadlines and priorities requires extra logic for TCP
+to capture some of ATP’s extended semantics. We used two
+schemes to extend TCP at the application level:
+
+4.1 Experimental setup
+We ran our experiments on an Aironet IEEE 802.11(b) wireless subnet with a single base station, which was attached to
+a Ethernet switch. A 200MHz Pentium Pro desktop computer running FreeBSD 4.2 served as the receiver. To minimise effects of contention on the wired network, it was at-
+
+(i). TCP with deadlines (“TCP”). The sender opens a single, blocking connection to the receiver. When the con8
+
+test name
+uniform
+equal
+
+nection is idle, the sender waits for a new object, if none
+are queued. If there is a queue of new objects to send,
+the first one is sent if less than half of its deadline has
+expired, otherwise it is discarded (this heuristic was intended to protect against backlogs when bandwidth was
+very low). Discarded objects are logged. Send operations are irrevocable. Once a send completes, the time is
+compared against the deadline to see if it was delivered
+in time. The receiver sends a 1-byte user-level acknowledgement to the sender upon receipt of each packet, so
+as to conform to ATP semantics, which mandate that a
+send operation is only reported as completed once the
+object has been received. TCP allows a blocking send
+to complete once buffer space is available in the kernel
+to hold the data.
+
+unequal-1
+unequal-2
+reversed
+filesystem
+random
+
+priority
+low
+high
+high
+high
+low
+high
+low
+high
+low
+high
+low
+all
+
+size
+4 KB
+4 KB
+32 KB
+4 KB
+64 KB
+4 KB
+256 KB
+64 KB
+4 KB
+64 B
+64 KB
+1-64 KB
+
+deadline
+1s
+1s
+4s
+1s
+16 s
+1s
+16 s
+16 s
+1s
+0.5 s
+1s
+0.5-4 s
+
+delay
+0.5 s
+0.5 s
+2s
+0.5 s
+8s
+0.5 s
+8s
+8s
+0.5 s
+0.1 s
+1s
+0.5 s
+
+n
+600
+600
+150
+600
+38
+600
+38
+75
+600
+3000
+300
+600
+
+Table 1: Parameters for the priority and deadline tests. Objects in
+each workload are divided by priority. The columns for “delay” and
+“n” give the inter-arrival spacing and the number of objects, respectively. Sizes and deadlines for the random test are distributed uniformally within the ranges indicated.
+
+(ii). Multi-stream TCP (“M-TCP”). Multiple objects can be
+sent concurrently, by opening a configurable number of
+TCP connections to the receiver when a test starts. In
+our experiments, one connection was opened for lowpriority objects, and the number of high-priority connections was varied. Behavior is otherwise the same as TCP
+with deadlines (in particular, sends cannot be aborted),
+though M-TCP uses the same interface as ATP.
+
+there is a protocol overhead which manifests itself for both
+synchronous and asynchronous sends when the object size is
+below 4 KB. We conclude that ATP with asynchronous sends
+is the correct choice for high performance, provided that individual objects are not too small (as a point of reference, the
+typical UDP packet size used by NFS is 8 KB).
+
+4.3 Bulk data transfer
+
+4.4 Priority and deadline workloads
+
+The raw performance of ATP was measured by a series of
+throughput tests, using object sizes starting at 1 KB, and increasing by powers of 2 up to 1 MB. Inter-arrival spacing was
+negligible, and the duration of the test was set so that each test
+transferred a total of 64 MB. All the objects were given a uniform deadline long enough to ensure that they would be sent
+without the risk of being rejected, and bandwidth was set to
+512 KB/s. The experiments were conducted using only synchronous or only asynchronous sends. For comparison, the
+same experiments were run using TCP with a single connection.
+The results are shown in Figure 6(a), which graphs the
+peak throughput for the protocols, so as to exclude the effects of slow start and bandwidth estimation. The line for
+TCP is roughly constant at 512 KB/s, the maximum available. For ATP there are two curves, “atp-sync” for ATP with
+synchronous send calls, and “atp-async” for ATP with asynchronous calls. Except at the largest object sizes, ATP with
+synchronous sends performs worse than TCP, and much worse
+for small objects, with a peak throughput of about 14 KB/s for
+1 KB objects. However, for objects of at least 4 KB, ATP with
+asynchronous sends is competitive with TCP. A large part of
+the poor performance of synchronous ATP is due to contextswitching overheads: two context switches are necessary for
+each blocking send operation, which are compounded with the
+base cost of the kernel calls to send the packets. In addition,
+
+To compare ATP and TCP, we used seven workloads, each
+mixing objects of different priorities and deadlines. When ATP
+and M-TCP were used, all objects were sent asynchronously.
+The characteristics of the objects for each test, grouped by priority, are shown in Table 1.
+Most of the workloads had two classes of objects, a highpriority and a low-priority class. The objective of these tests
+was to measure how many high-priority objects each protocol could deliver. A secondary consideration was how many
+low-priority objects were delivered, since a trivial protocol
+could refuse to deliver all low-priority objects! The “uniform”
+test had only high-priority objects, while the “random” test
+used objects of low, medium and high priorities (205, 191
+and 204 objects respectively). Priorities, sizes and deadlines
+for the random test were chosen randomly from the ranges
+listed, according to a uniform distribution. The “filesystem”
+workload was intended to model a mixture of large file chunk
+retrievals and validation calls, as might be encountered in a
+typical distributed file system. All the tests used the trace of
+bandwidth described earlier, which varied bandwidth between
+0 and 200 KB/s, and lasted for five minutes.
+Figures 6(b) and 6(c) plot the results of the first six tests,
+with 6(b) showing the proportion of high-priority objects delivered, and the proportion of low-priority objects in 6(c). In
+both graphs, the values plotted are normalised against the num-
+
+9
+
+1
+
+600
+500
+
+% objects delivered
+
+throughput (Kbytes/sec)
+
+0.9
+
+400
+300
+200
+tcp
+atp−sync
+atp−async
+
+100
+
+0.8
+0.7
+0.6
+0.5
+0.4
+
+atp
+tcp
+mtcp−1
+mtcp−2
+mtcp−3
+mtcp−4
+
+0.3
+0.2
+0.1
+
+0
+1
+
+2
+
+4
+
+8
+
+16
+32
+64
+128
+object size (Kbytes)
+
+256
+
+512
+
+0
+
+1024
+
+1
+0.9
+
+0.8
+
+0.8
+
+% objects delivered
+
+% objects delivered
+
+1
+
+0.7
+0.6
+0.5
+0.4
+atp
+tcp
+mtcp−1
+mtcp−2
+mtcp−3
+mtcp−4
+
+0.1
+0
+
+unequal−2
+
+reversed
+
+fs
+
+(b) High-priority object delivery
+
+0.9
+
+0.2
+
+unequal−1
+
+tests
+
+(a) Bulk data transfer
+
+0.3
+
+equal
+
+0.7
+0.6
+0.5
+atp
+tcp
+mtcp−1
+mtcp−2
+mtcp−3
+mtcp−4
+
+0.4
+0.3
+0.2
+0.1
+
+uniform
+
+equal
+
+unequal−1 unequal−2
+
+reversed
+
+0
+
+fs
+
+tests
+
+low
+
+medium
+
+high
+
+priority
+
+(c) Low-priority object delivery
+
+(d) Random workload
+
+Figure 6: ATP performance compared to TCP. Graph (a) compares the raw performance of synchronous and asynchronous ATP versus TCP
+by object size; (b), (c) and (d) show relative proportions of objects delivered by ATP, TCP and M-TCP for workloads of different object sizes,
+priorities and deadlines.
+
+ber of objects of that priority present in the corresponding
+workload. For delivering high-priority objects, ATP performs
+comparably to TCP with deadlines, and significantly outperforms TCP for the unequal-2 and filesystem workloads. This
+is only to be expected, since TCP ignores priorities entirely.
+Figure 6(c) shows that this improvement is at the expense of
+low-priority objects, though the margin between TCP and ATP
+is mostly small. ATP performs the best in the tests where the
+difference in size between low-priority and high-priority objects is greatest. In the “reversed” test ATP delivers one highpriority object less than TCP, rejecting the extra object due to
+insufficient bandwidth, but delivers more low-priority objects.
+Examining the relative performance of ATP and M-TCP
+shows a different pattern. Each experiment was repeated four
+times using M-TCP, with 1 low-priority stream, 1 mediumpriority stream (where appropriate), and 1 to 4 high-priority
+TCP streams. Allowing M-TCP to exploit knowledge of priorities results in performance which approaches that of ATP for
+high-priority objects, and is as least as good for low-priority
+objects. Unsurprisingly, the best choice for the number of MTCP streams depends on the characteristics of the workload,
+with no number dominating overall. However, the filesystem workload reveals the difference between ATP and M-TCP,
+with ATP performing 15-20% better for both priority levels.
+This is largely due to ATP avoiding the concurrent transmis10
+
+sion of high-priority, short-deadline objects with low-priority
+objects, which M-TCP cannot avoid.
+Figure 6(d) shows the “random” workload, in which ATP
+also outperforms TCP and M-TCP. It differs from the preceding experiments in having three rather than two priority levels,
+and the sizes and deadlines of all objects being selected according to the same probability distribution. Once again, ATP
+does better than regular TCP except at the lowest priority level.
+In comparison with the M-TCP configurations, ATP achieves
+10-15% better performance at all priority levels. As in the
+filesystem test, M-TCP’s use of multiple streams results in
+multiple objects being transmitted at the same time. At some
+points this proves to be a significant liability, since it can result
+in all the concurrently-transmitted objects missing their deadlines. ATP chooses the transmission order autonomously, but
+transmits objects serially to avoid this phenomenon.
+Further insight into the differences between the protocols can
+gained by examining the final status of objects in some representative tests. Table 2 gives the status (successfully delivered,
+rejected on entry, or deadline exceeded) for high-priority objects in four of the tests.
+Since TCP cannot admit objects asynchronously, it is very
+aggressive in rejecting objects. Among TCP tests in Table 2,
+the random test is the only one in which deadlines for high-
+
+test name
+equal
+
+unequal-2
+
+fs
+
+random
+
+protocol
+ATP
+TCP
+M-TCP2
+ATP
+TCP
+M-TCP2
+ATP
+TCP
+M-TCP2
+ATP
+TCP
+M-TCP2
+
+delivered
+524
+497
+506
+522
+360
+512
+2605
+1319
+1783
+162
+150
+128
+
+rejected
+62
+103
+69
+58
+240
+62
+1
+1681
+397
+30
+43
+36
+
+deadline
+14
+0
+25
+20
+0
+26
+394
+0
+360
+12
+11
+37
+
+Table 2: Final status of high-priority objects in four tests. For conciseness, only the configuration of M-TCP with two high-priority
+streams is shown.
+
+priority objects expired, since in this test most of the objects
+were large enough to make this likely. ATP and M-TCP reject
+fewer objects initially, but discard more later, as their deadlines
+expire when they are queued for transmission. Unlike M-TCP,
+ATP is able to discard objects early due to insufficient bandwidth, so it may recognise that an object’s deadline will expire
+without wasting bandwidth unnecessarily. As a result, ATP
+consumes less bandwidth than M-TCP in theses tests (though
+more than TCP, which also delivers fewer objects).
+To summarise, in most cases, both M-TCP and ATP represent
+an improvement over TCP in the proportion of high-priority
+objects delivered. However, ATP is able to outperform M-TCP
+by a factor of 10% or more for some workloads, including
+network communication typical of a distributed file system.
+
+5 Related work
+Research in adapting a host to bandwidth variation and other
+characteristics of wireless networks can be divided into three
+groups: application adaptation, transport protocol enhancements, and link bandwidth allocation.
+Adapting applications to bandwidth variations can be done
+in a number of ways. One possibility is in the file system, by
+adjusting to disconnections [14, 24] or low bandwidth availability [20]. Application-specific adaptations can be made if
+applications are able to change their mode of operation based
+on available bandwidth, in which case the amount of communication, or data quality, can be correspondingly varied [12,
+17, 21]. Another alternative is to divide data accesses made by
+applications into a hierarchy of tasks or documents and allocate bandwidth among them [7, 10]. ATP is particularly similar to HATS [7], which divides documents into hierarchies
+of data objects, and allows policies for scheduling retrieval of
+particular object classes to be specified for the whole system.
+ATP differs in using lower-level mechanisms, and adding facil-
+
+11
+
+ities for timely delivery of objects. The design of ATP borrows
+some ideas from Rover’s Queued RPC [12].
+Considerable effort has also been made to adapt transport
+protocols to the peculiarities of wireless networks. Balakrishnan et al [3], Indirect-TCP [2] and M-TCP [6] (unrelated to
+our M-TCP) overcome high bit errors and hand-offs, and adjust TCP’s algorithms while attempting to still preserve TCP
+semantics. WebTP [11] is optimised for HTTP requests, while
+Mowgli [15] adds different connection modes for TCP connections, logical conditions on object transfers, and priorities
+for bandwidth allocation between flows. Mobiware [1] unifies
+the transport layer and application adaptation using modes of
+operation. Unlike ATP, it is a flow-based, not a message-based
+system.
+Allowing quality of service guarantees for concurrent flows
+on a single link has been extensively studied [8]. Spring et al
+[26] control the bandwidth used by TCP streams at the receiver
+by manipulating kernel buffer sizes. Netnice [23] regulates
+application bandwidth usage in the kernel. RAMP [18] infers
+bandwidth requirements for real-time flows. Hierarchical linkscheduling [9, 27] shares bandwidth on a link among protocols
+or hierarchical classes of flows. Congestion Manager [4] adds
+unified congestion control between IP and the upper layers of
+the protocol stack to prevent oscillation of bandwidth allocations between flows. Like ATP, it has an asynchronous interface and callbacks, and schedules one packet at a time, but
+does not use deadlines or priorities for packets.
+
+6 Conclusion
+We have compared three mechanisms for providing adaptation
+through priorities and deadlines in the transport protocol: two
+user-level extensions of TCP, and one new protocol, ATP. We
+have also described the design and implementation of ATP and
+how it adjusts to changes in bandwidth. Our experiments show
+that both TCP and TCP with multiple streams give good performance, but that ATP generally performs comparably, and in
+some cases outperforms the TCP variants. In particular, for
+filesystem-like workloads, ATP achieves a considerable improvement. We intend to investigate this area further by implementing a filesystem for mobile computers which makes
+use of ATP’s extended semantics. Further work on ATP will
+investigate the performance of the protocol when there is contention among multiple hosts in the wireless network.
+
+Acknowledgements
+We would like to thank Alan Demers, Emin Gün Sirer, Robbert van Renesse, Eva Tardos and Werner Vogels for advice
+and for pointing out mistakes. We also thank Venugopalan
+Ramasubramanian for commenting on the final draft, and Indranil Gupta and Rimon Barr for helpful discussions.
+
+References
+
+[16] K. Lai and M. Baker. Measuring link bandwidths using a deterministic model of packet delay. In Proceedings of the ACM
+SIGCOMM 2000 Conference, pages 283–294, Stockholm, Sweden, Aug. 2000.
+
+[1] O. Angin, A. Campbell, M. Kounavis, and R. Liao. The Mobiware toolkit: Programmable support for adaptive mobile networking. IEEE Personal Communications, Aug. 1998.
+[2] A. V. Bakre and B. R. Badrinath. Implementation and performance evaluation of Indirect TCP. IEEE Transactions on Computers, 46(3):260–278, 1997.
+
+[17] B. Li and K. Nahrstedt. QualProbes: Middleware QoS profiling
+services for configuring adaptive applications. In Proceedings
+of the IFIP/ACM International Conference on Distributed Systems Platforms, Apr. 2000.
+
+[3] H. Balakrishnan, V. Padmanabhan, S. Seshan, and R. H. Katz.
+A comparison of mechanisms for improving TCP performance
+over wireless links. IEEE/ACM Transactions on Networking,
+5(6):756–769, Dec. 1997.
+
+[18] K. Li, J. Walpole, D. McNamee, C. Pu, and D. C. Steere. A
+rate-matching packet scheduler for real-rate applications. In
+Proceedings of Multimedia Computing and Networking 2001,
+Jan. 2001.
+
+[4] H. Balakrishnan, H. Rahul, and S. Seshan. An integrated congestion management architecture for Internet hosts. In Proceedings of the ACM SIGCOMM ’99 Conference, pages 175–187,
+Cambridge, Massachussetts, Sept. 1999.
+
+[19] J. Liu. Real-Time Systems, chapter 7. Prentice-Hall, 2000.
+[20] A. Muthitacharoen, B. Chen, and D. Mazières. A lowbandwidth network file system. In Proceedings of the Seventeenth ACM Symposium on Operating Systems Principles, Lake
+Louise, Alberta, Oct. 2001.
+
+[5] J.-C. Bolot. End-to-end packet delay and loss behavior in the Internet. In Proceedings of the ACM SIGCOMM ’93 Conference,
+pages 289–298, San Francisco, California, Sept. 1993.
+
+[21] B. D. Noble and M. Satyanarayanan. Experience with adaptive
+mobile applications in Odyssey. Mobile Networks and Applications, 4(4), 1999.
+
+[6] K. Brown and S. Singh. M-TCP: TCP for mobile cellular networks. ACM Computer Communication Review, 27(5), 1997.
+
+[22] B. D. Noble, M. Satyanarayanan, G. T. Nguyen, and R. H.
+Katz. Trace-based mobile network emulation. In Proceedings
+of the ACM SIGCOMM ’97 Conference, pages 51–62, Cannes,
+France, Sept. 1997.
+
+[7] E. de Lara, D. S. Wallach, and W. Zwaenepoel. HATS: Hierarchical adaptive transmission scheduling for multi-application
+adaptation. In Proceedings of the 2002 Multimedia Computing
+and Networking Conference, San Jose, California, Jan. 2002.
+
+[23] T. Okumura, M. Moir, and D. Mossé. Netnice: nice is not only
+for CPUs. In Proceedings of the Ninth International Conference on Computer Communication and Networks, Las Vegas,
+Nevada, Oct. 2000.
+
+[8] A. Demers, S. Keshav, and S. Shenker. Analysis and simulation of a fair queueing algorithm. In Proceedings of the ACM
+SIGCOMM ’89 Conference, pages 1–12, Austin, Texas, 1989.
+[9] S. Floyd and V. Jacobson. Link-sharing and resource management model for packet networks. IEEE/ACM Transactions on
+Networking, 3(4), Aug. 1995.
+
+[24] T. W. Page, R. G. Guy, J. S. Heidemann, D. Ratner, P. Reiher,
+A. Goel, G. H. Kuenning, and G. J. Popek. Perspectives on
+optimistically replicated peer-to-peer filing. Software – Practice
+and Experience, 28(2):155–180, Feb. 1998.
+
+[10] G. H. Forman. Obtaining Responsiveness in Resource-Poor Environments. PhD thesis, University of Washington, 1996. University of Washington Computer Science Department Technical
+Report UW-CSE-98-01-05.
+
+[25] L. Rizzo. Dummynet: a simple approach to the evaluation of
+network protocols. ACM Computer Communication Review,
+27(1), Jan. 1997.
+
+[11] R. Gupta, M. Chen, S. McCanne, and J. Walrand. A receiverdriven transport protocol for the web. In Proceedings of the
+Fifth INFORMS Telecommunications Conference, Mar. 2000.
+
+[26] N. T. Spring, M. Chesire, M. Berryman, V. Sahasranaman,
+T. Anderson, and B. Bershad. Receiver based management of
+low bandwidth access links. In Proceedings of IEEE INFOCOM
+2000, pages 245–254, 2000.
+
+[12] A. D. Joseph, J. A. Tauber, and M. F. Kaashoek. Mobile computing with the Rover Toolkit. IEEE Transactions on Computers: Special issue on Mobile Computing, 46(3):337–352, Mar.
+1997.
+
+[27] I. Stoica, H. Zhang, and T. S. E. Ng. A hierarchical fair service curve algorithm for link-sharing, real-time, and priority
+services. IEEE/ACM Transactions on Networking, 8(2):185–
+199, 2000.
+
+[13] S. Keshav. An Engineering Approach to Computer Networking,
+pages 424–426. Addison-Wesley, 1997.
+
+[28] Virtual interface architecture specification version 1.0, Dec.
+1997. http://www.viarch.org.
+
+[14] J. J. Kistler and M. Satyanarayanan. Disconnected operation in
+the Coda file system. ACM Transactions on Computer Systems,
+10(1):3–25, 1992.
+
+[29] T. von Eicken, A. Basu, V. Buch, and W. Vogels. U-Net: a userlevel network interface for parallel and distributed computation.
+In Proceedings of the Fifteenth ACM Symposium on Operating Systems Principles, pages 40–53, Copper Mountain Resort,
+Colorado, Dec. 1995.
+
+[15] M. Kojo, T. Alanko, M. Liljeberg, and K. Raatikainen. Enhanced communication services for mobile TCP/IP networking.
+Technical report, University of Helsinki, Apr. 1995. Report C1995-15.
+
+12
+
+

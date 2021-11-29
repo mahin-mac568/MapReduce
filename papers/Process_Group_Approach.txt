@@ -1,0 +1,2429 @@
+Business
+
+Computing
+
+T H E PROCESS GROUP APPROACH TO
+RELIABLE DISTRIBUTED
+C O M P U T I N G Kenneth P. Birman
+O n e might expect the reliability of a distributed
+system to correspond directly to the reliability of
+its constituents, but this is not always the case.
+The mechanisms used to structure a distributed
+system and to implement cooperation between
+components play a vital role in determining
+the reliability of the system. M a n y
+contemporary distributed operating
+systems have placed emphasis on communication performance, overlooking
+the need for tools to integrate components into a reliable whole. The
+communication primitives supported
+give generally reliable behavior, but
+exhibit problematic semantics when
+transient failures or system configuration changes occur. The resulting
+building blocks are, therefore, unsuitable for facilitating the construction of
+systems where reliability is important.
+This article reviews 10 years of
+research on ISIS, a system that provides tools to support the construction of reliable distributed software.
+T h e thesis underlying ISIS is that
+development of reliable distributed
+software can be simplified using process groups and group programming
+tools. This article describes the approach taken, surveys the system,
+and discusses experiences with real
+applications.
+It will be helpful to illustrate
+group programming and ISIS in a
+setting where the system has found
+rapid acceptance: brokerage and
+trading systems. These systems integrate large numbers of demanding
+applications and require timely reaction to high volumes of pricing and
+
+trading information. 1 It is not uncommon for brokers to coordinate
+trading activities across multiple
+markets.
+Trading strategies rely on accurate
+pricing and market-volatility data,
+dynamically changing databases giving the firm's holdings in various
+equities, news and analysis data, and
+elaborate financial and economic
+models based on relationships between financial instruments. Any distributed system in support of this
+application must serve multiple communities: the firm as a whole, where
+reliability and security are key considerations; the brokers, who depend
+on speed and the ability to customize
+the trading environment; and the
+system administrators, who seek uniformity, ease of monitoring and control. A theme of this article is that all
+of these issues revolve around the
+technology used to "glue the system
+together." By endowing the corresponding software layer with predictable, fault-tolerant behavior, the
+flexibility and reliability of the overIAlthough this class o f systems certainly dem a n d s high p e r f o r m a n c e , there are no realtime deadlines or h a r d time constraints, such as
+in the FAA's A d v a n c e d A u t o m a t i o n System
+[14]. This issue is discussed f u r t h e r in the section "ISIS a n d O t h e r Distributed C o m p u t i n g
+Technologies."
+
+all system can be greatly enhanced.
+Figure 1 illustrates a possible interface to a trading system. The display is centered around the current
+position of the account being traded,
+showing purchases and sales as they
+occur. A broker typically authorizes
+purchases or sales of shares in a
+stock, specifying limits on the price
+and the number of shares. These instructions are communicated to the
+trading floor, where agents of the
+brokerage or bank trade as many
+shares as possible, remaining within
+this authorized window. The display
+illustrates several points:
+
+• Information backplane. T h e broker
+would construct such a display by interconnecting elementary widgets
+(e.g., graphical windows, computational widgets) so that the output of
+one becomes the input to another.
+Seen in the large, this implies the
+ability to publish messages and subscribe to messages sent from program
+to program on topics that make up
+the "corporate information backplane" of the brokerage. Such a
+backplane would support a naming
+structure, communication interfaces,
+access restrictions, and some sort of
+selective history mechanism. For example, when subscribing to a topic,
+
+¢OMMUNICATIONSOWTHllACM December 1993/Vol.36,No.12
+
+3~
+
+®
+
+Business
+
+an application will often need key
+messages posted to that topic in the
+past.
+• Customization.
+T h e display suggests
+that the system must be easily customized. T h e information backplane
+must be organized in a systematic
+way (so that the broker can easily
+track down the name o f communication streams o f interest) and flexible
+(allowing the introduction o f new
+communication streams while the
+system is active).
+• H i e r a r c h i c a l s t r u c t u r e . Although the
+trader will treat the wide-area system
+in a seamless way, communication
+disruptions are far m o r e c o m m o n on
+wide-area links (say, from New York
+to Tokyo or Zurich) than on localarea links. This gives the system a
+hierarchical structure composed o f
+local-area systems which are closely
+coupled and rich in services, interconnected by less reliable and
+higher-latency wide-area communication links.
+What about the reliability implications of such an architecture? In Figure 1, the t r a d e r has g r a p h e d a computed index of technology stocks
+against the price o f IBM, and it is
+easy to imagine that such customization could include computations critical to the trading strategy o f the
+firm. In Figure 2, the analysis program is '"shadowed" by additional
+copies, to indicate that it has been
+m a d e fault-tolerant (i.e., it would
+remain available even if the broker's
+workstation failed). A b r o k e r is unlikely to be a sophisticated p r o g r a m mer, so fault-tolerance such as this
+would have to be introduced by the
+s y s t e m - - t h e trader's only action
+being to request it, perhaps by specifying the degree o f reliability n e e d e d
+for this analytic program. This
+means the system must automatically
+replicate or checkpoint the computation, placing the replicas on processors that fail i n d e p e n d e n t l y from the
+broker's workstation, and activating a
+backup if the primary fails.
+T h e requirements of m o d e r n
+trading environments are not unique
+to the application. It is easy to rephrase this example in terms of the
+issues confronted by a team o f seismologists cooperating to interpret
+the results of a seismic survey u n d e r
+way in some remote and inaccessible
+
+~8
+
+Computing
+
+region, a doctor reviewing the status
+o f patients in a hospital from a workstation at home, a design g r o u p collaborating to develop a new product,
+or application p r o g r a m s cooperating
+in a factory-floor process control setting. T h e software o f a m o d e r n telecommunications switching p r o d u c t is
+faced with many o f the same issues,
+as is software implementing a database that will be used in a large distributed selting. To build applications for the networked environments o f the future, a technology
+is n e e d e d that will make it as easy to
+solve these types o f problems as it is
+to build graphical user interfaces
+(GUIs) today.
+A central premise of the 1SIS project, shared with several other efforts
+[2, 14, 19, 22, 25] is that s u p p o r t for
+p r o g r a m m i n g with d i s t r i b u t e d g r o u p s
+of cooperating programs
+is the key to
+solving problems such as the ones
+previously mentioned. For example,
+a fault-tolerant data analysis service
+can be i m p l e m e n t e d by a g r o u p o f
+programs that a d a p t transparently to
+failures and recoveries. T h e publication/subscription style of interaction
+involves an anonymous use o f process groups: here, the g r o u p consists
+o f a set o f publishers and subscribers
+that vary dramatically as brokers
+change the instruments they trade.
+Each interacts with the g r o u p
+t h r o u g h a g r o u p name (the topic),
+but the g r o u p m e m b e r s h i p is not
+tracked or used within the computation. Although the processes publishing or subscribing to a topic do not
+cooperate directly, when this structure is employed, the reliability o f the
+application will d e p e n d on the reliability o f g r o u p communication. It is
+easy to see how problems could arise
+if, for example, two brokers monitoring the same stock see different pricing information.
+Process groups o f various kinds
+arise naturally t h r o u g h o u t a distributed system. Yet, c u r r e n t distributed
+computing environments provide little s u p p o r t for g r o u p communication patterns and p r o g r a m m i n g .
+These issues have been left to the
+application p r o g r a m m e r , and application p r o g r a m m e r s have been
+largely unable to r e s p o n d to the challenge. In short, c o n t e m p o r a r y distributed computing environments
+
+December 1993/Vol.36, No.12 COMMU~ICa'rlOM$OP'rHi AClW
+
+prevent users from realizing the potential o f the distributed computing
+infrastructure on which their applications run.
+
+Process Groups
+Two styles o f process g r o u p usage
+are seen in most ISIS applications:
+Anonymous
+groups:
+These arise
+when an application publishes data
+u n d e r some "topic," and other processes subscribe to that topic. For an
+application to operate automatically
+and reliably, anonymous groups
+should provide certain properties:
+
+1. It should be possible to send messages to the g r o u p using a g r o u p a d dress.
+T h e high-level p r o g r a m m e r
+should not be involved in e x p a n d i n g
+the g r o u p address into a list o f destinations.
+2. I f the sender and subscribers
+remain operational, messages should
+be delivered exactly once. I f the
+sender fails, a message should be delivered to all or none o f the subscribers. T h e application p r o g r a m m e r
+should not need to worry about message loss or duplication.
+3. Messages should be delivered to
+subscribers in some sensible order.
+For example, one would expect messages to be delivered in an o r d e r consistent with causal dependencies: if a
+message m is published by a p r o g r a m
+that first received m ] . . . m i , then m
+might be d e p e n d e n t on these prior
+messages. I f some other subscriber
+will receive m as well as one or m o r e
+o f these prior messages, one would
+expect them to be delivered first.
+Stronger o r d e r i n g properties might
+also be desired, as discussed later.
+4. It should be possible for a subscriber to obtain a history of the
+g r o u p - - a log o f key events and the
+o r d e r in which they were received. 2
+I f n messages are posted and the first
+message seen by a new subscriber will
+be message m i , one would expect
+messages m l • • • m i - i t o be reflected
+in the history, and messages m i . . .
+m , , to all be delivered to the new process. I f some messages are missing
+from the history, or included both in
+2 T h e application itself w o u l d d i s t i n g u i s h m e s sages that n e e d to be r e t a i n e d f r o m those that
+can be d i s c a r d e d .
+
+the history and in the subsequent
+postings, incorrect behavior might
+result.
+
+Explicit groups: A group is explicit
+when its members cooperate directly:
+they know themselves to be members
+of the group, and employ algorithms
+that incorporate the list o f members,
+relative rankings within the list, or in
+which responsibility for responding
+to requests is shared.
+Explicit groups have additional
+needs stemming from their use of
+group membership information: in
+some sense, membership changes are
+among the information being published to an explicit group. For example, a fault-tolerant service might
+have a primary member that takes
+some action and an ordered set of
+backups that take over, one by one, if
+the current primary fails. Here,
+group membership changes (failure
+of the primary) trigger actions by
+group members. Unless the same
+changes are seen in the same order
+by all members, situations could arise
+in which there are no primaries, or
+several. Similarly, a parallel database
+search might be done by ranking the
+group members and then dividing
+the database into n parts, where n is
+the number of group members. Each
+member would do 1/n'th of the work,
+with the ranking determining which
+member handles which fragment of
+the database. The members need
+consistent views of the group membership to perform such a search
+correctly; otherwise, two processes
+might search the same part of the
+database while some other part remains unscanned, or they might partition the database inconsistently.
+Thus, a number of technical problems must be considered in developing software for implementing distributed process groups:
+
+Support for group communication,
+including addressing, failure atomicity, and message delivery ordering.
+• Use of group membership as an input.
+It should be possible to use the group
+membership or changes in membership as input to a distributed algorithm (one run concurrently by multiple group members).
+• Synchronization. To obtain globally
+
+•
+
+/japan/quotes/ibm
+f~ / n y s /~q u O t e s / i b m
+
+~
+
+[
+
+Zurich: up
+Japan: closed
+
+]]
+
+Hitch=
+
+(IBM+DEC+HP)A
+Overall Position
+Trades in progress
+Stock Shares BIO
+Price
+IBM
+500
+B
+133-1/4
+IBM
+1500
+B
+132-118
+IBM
+1000
+O
+134-1/4
+DEC
+650
+B
+96-3/8
+
+/japan/quotes/iIbm
+I /nys/quotes/dIec I
+If~ / n y s / q u O t e s / i b m
+
+Zurich: up
+Japan: closed
+
+I
+
+Overall Position
+Trades in progress
+Stock
+
+iBM
+IBM
+IBM
+DEC
+
+correct behavior from group applications, it is necessary to synchronize
+the order in which actions are taken,
+particularly when group members
+will act independently on the basis of
+dynamically changing, shared information.
+The first and last of these problems have received considerable
+study. However, the problems cited
+are not independent: their integration within a single framework is
+nontrivial. This integration issue
+underlies our virtual synchrony execution model.
+
+Shares
+
+B/O
+
+500
+1500
+1000
+650
+
+B
+B
+O
+B
+
+Price
+
+133-1/4
+132-1/8
+134-114
+96-3•8
+
+F i g u r e 1. B r o k e r ' s t r a d i n g s y s t e m
+F i g u r e 2. M a k i n g a n a n a l y t i c
+service fault-tolerant
+
+CS ~ S
+
+~ Primary
+Backup
+
+3.Inconsistent
+states
+
+Figure
+tion
+
+connec-
+
+Building Distributed Services
+Over Conventional Technologies
+
+In this section we review the technical issues raised in the preceding section. In each case, we start by describing the problem as it might be
+approached by a developer working
+over a contemporary computing sys-
+
+¢OIIIIUNICATIONBOPTHiA¢li
+December1993/"/ol.36,No.12 39
+
+tern, with. no special tools for group
+programming. Obstacles to solving
+the proh,lems are identified, and
+used to motivate a general approach
+to overcoming the problem in question. Where appropriate, the actual
+approach used in solving the problem within ISIS is discussed.
+
+Conventional Message-Passing
+Technologies
+Contemporary operating systems
+offer three classes of communication
+services ['14]:
+Unreliable datagrams: These services
+automatically discard corrupted messages, but do little additional processing. Most messages get through, but
+u n d e r some conditions messages
+might be lost in transmission, duplicated, or ,delivered out of order.
+• Remote ,procedure call: In this approach, communication results from
+a procedure invocation that returns a
+result. RPC is a relatively reliable service, but when a failure does occur,
+the sender is unable to distinguish
+a m o n g many possible outcomes: the
+destination may have failed before or
+after receiving the request, or the
+network may have prevented or delayed delivery of the request or the
+reply.
+• Reliable data streams: Here, communication is performed over channels
+that provide flow control and reliable, sequenced message delivery.
+Standard stream protocols include
+TCP, the ISO protocols, and TP4.
+Because of pipelining, streams generally outperform RPC when an application sends large volumes of data.
+However, the standards also prescribe rules u n d e r which a stream
+will be broken, using conditions
+based on timeout or excessive retransmissions. For example, suppose
+that processes c, s] and s9 have connections with one a n o t h e r - - p e r h a p s ,
+si and s2 are the primary and backup,
+respectively, for a reliable service of
+which c is a client.
+
+•
+
+Now, consider the state of this system if the. connection from c to s 1
+breaks due to a communication failure, while all three processes and the
+other two connections remain operational (Figure 3). Much like the situation after a failed RPC, c and Sl will
+
+40
+
+now be uncertain regarding one another's status. Worse, s9 is totally unaware of the problem. I n such a situation, the application may easily
+behave in an inconsistent manner. In
+our primary-backup example, c
+would cease sending requests to sl,
+expecting s2 to handle them. s2, however, will not respond (it expects Sl to
+do so).
+In a system with more components, the situation would be greatly
+exacerbated. From this, one sees that
+a reliable data stream has guarantees
+little stronger than an unreliable one:
+when channels break, it is not safe to
+infer that either e n d p o i n t has failed;
+channels may not break in a consistent m a n n e r , and data in transit may
+be lost. Because the conditions u n d e r
+which a stream break are defined by
+the standards, one has a situation in
+which potentially inconsistent behavior is unavoidable.
+These considerations lead us to
+make a collection of assumptions
+about the network and message communication in the remainder of the
+article. First, we will assume the system is structured as a wide-area network (WAN) composed of local-area
+networks (LANs) interconnected by
+wide-area
+communication links.
+(WAN issues will not be considered
+in this article due to space constraints.) We assume that each LAN
+consists of a collection of machines
+(as few as two or three, or as many as
+one or two hundred), connected by a
+collection of high-speed, lowqatency
+communication devices. If shared
+memory is employed, we assume it is
+not used over the network. Clocks
+are not assumed to be closely synchronized.
+Within a LAN, we assume messages may be lost in transit, arrive out
+of order, be duplicated, or be discarded because of inadequate buffering capacity. We also assume that
+LAN communication partitions are
+rare. T h e algorithms described later
+in this article and the ISIS system itself may pause (or make progress in
+only the largest partition) d u r i n g
+periods of partition failure, resuming normal operation only when normal communication is restored.
+We will assume the lowest levels of
+the system are responsible for flow
+control and for overcoming message
+
+December 1993/Vol.36, No.12 ¢ O M M U N I C A T I O N S O F T H E A I I I M
+
+loss and u n o r d e r e d delivery. In ISIS,
+these tasks are accomplished using a
+windowed acknowledgement protocol similar to the one used in TCP,
+but integrated with a failure-detection subsystem. With this (nonstandard) approach, a consistent systemwide view of the state of components
+in the system and of the state of communication channels between them
+can be presented to higher layers of
+software. For example, the ISIS
+transport layer will only break a communication channel to a process in
+situations in which it would also report to any application monitoring
+that process that the process has
+failed. Moreover, if one channel to a
+process is broken, all channels are
+broken.
+Failure Model
+T h r o u g h o u t this article, processes
+and processors are assumed to fail by
+halting, without initiating erroneous
+actions or sending incorrect messages. This raises a problem: transient p r o b l e m s - - s u c h as an unresponsive swapping device or a
+temporary communication o u t a g e - can mimic halting failures. Because
+we will want to build systems guaranteed to make progress when failures
+occur, this introduces a conflict between "accurate" and "timely" failure
+detection.
+One way ISIS overcomes this
+problem is by integrating the communication transport layer with the
+failure detection layer to make processes appear to fail by halting, even
+when this may not be the case: a failstop model [30]. To implement such a
+model, a system uses an agreement
+protocol to maintain a system membership list: only processes included
+in this list are permitted to participate in the system, and nonresponsive or failed processes are d r o p p e d
+[12, 28]. If a process d r o p p e d from
+the list later resumes communication,
+the application is forced to either
+shut down gracefully or to r u n a "reconnection" protocol. T h e message
+transport layer plays an important
+role, both by breaking connections
+and by intercepting messages from
+faulty processes.
+In the r e m a i n d e r of this article we
+assume a message transport and
+failure-detection layer with the prop-
+
+Business
+
+erties of the one used by ISIS. To
+summarize, a process starts execution by j o i n i n g the system, interacts
+with it over a period of time d u r i n g
+which messages are delivered in the
+order sent, without loss or duplication, and then terminates (if it terminates) by halting delectably. Once a
+process terminates, we will consider
+it to be permanently gone from the
+system, and assume that any state it
+may have recorded (say, on a disk)
+ceases to be relevant. If a process
+experiences a transient problem and
+then recovers and rejoins the system,
+it is treated as a completely new ent i t y - n o attempt is made to automatically reconcile the state of the system
+with its state prior to the failure (recovery of this nature is left to higher
+layers of the system and applications).
+
+Building Groups Over Conventional
+Technologies
+
+Group Addressing. Consider the
+problem of m a p p i n g a group address
+to a membership list, in an application in which the membership could
+change dynamically due to processes
+j o i n i n g the group or leaving. T h e
+obvious way to approach this problem involves a membership service [9,
+12]. Such a service maintains a map
+from group identifiers to membership lists. Deferring fault-tolerance
+issues, one could implement such a
+service using a simple program that
+supports remotely callable procedures to register a new group or
+group member, obtain the membership of a group, and perhaps forward a message to the group. A process could then transmit a message
+either by forwarding it via the naming service, or by looking up the
+membership information, caching it,
+and transmitting messages directly. 3
+T h e first approach will perform better for one-time interactions; the second would be preferable in an application that sends a stream of
+messages to the group.
+This form of addressing also raises
+a scheduling question. T h e designer
+of a distributed application will want
+s In the latter case, one would also need a mechanism for invalidating cached addressing information when the g r o u p m e m b e r s h i p changes
+(this is not a trivial problem, but the need for
+brevity precludes discussing it in detail).
+
+Computing
+
+to send messages to all members of
+the group, u n d e r some reasonable
+interpretation of the term "all." T h e
+question, then, is how to schedule the
+delivery of messages so that the delivery is to a reasonable set of processes. For example, suppose that a
+process group contains three processes, and a process sends many
+messages to it. One would expect
+these messages to reach all three
+members, not some other set reflecting a stale view of the group composition (e.g., including processes that
+have left the group).
+T h e solution to this problem favored in our work can be understood
+by thinking of the group membership as data in a database shared by
+the sender of a multidestination message (a multicast4), and the algorithm
+used to add new members to the
+group. A multicast "reads" the membership of the group to which it is
+sent, holding a form of read-lock
+until the delivery of the message occurs. A change of membership that
+adds a new member would be treated
+like a "write" operation, requiring a
+write-lock that prevents such an operation from executing while a prior
+multicast is u n d e r way. It will now
+appear that messages are delivered
+to groups only when the membership
+is not changing.
+A problem with using locking to
+implement address expansion is cost.
+Accordingly, ISIS uses this idea, but
+does not employ a database or any
+sort of locking. And, rather than
+implement a membership server,
+which could represent a single point
+of failure, ISIS replicates knowledge
+of the membership among the members of the group itself. This is done
+in an integrated m a n n e r , in order to
+perform address expansion with no
+extra messages or unnecessary delays
+and guarantee the logical instantaneity property that the user expects.
+For practical purposes, any message
+sent to a group can be thought of as
+reaching all members at the same
+time.
+4 In this article the term multicast refers to sending a single message to the members of a process group. T h e term broadcast, c o m m o n in the
+literature, is sometimes confused with the hardware broadcast capabilities of devices like
+Ethernet. While a multicast might make use of
+hardware broadcast, this would simply represent one possible implementation strategy.
+
+O
+
+Logical time and causal dependency. T h e phrase "reaching all of its
+members at the same time" raises an
+issue that will prove to be f u n d a m e n tal to message-delivery ordering.
+Such a statement presupposes a temporal model. What notion of time
+applies to distributed process group
+applications?
+In 1978, Leslie Lamport published
+a seminal paper that considered the
+role of time in distributed algorithms
+[21]. Lamport asked how one might
+assign timestamps to the events in a
+distributed system to correctly capture the order in which events occurred. Real time is not suitable for
+this: each machine will have its own
+clock, and clock synchronization is at
+best imprecise in distributed systems.
+Moreover, operating systems introduce unpredictable software delays,
+processor execution speeds can vary
+widely due to cache affinity effects,
+and scheduling is often unpredictable. These factors make it difficult
+to compare timestamps assigned by
+different machines.
+As an alternative, Lamport suggested, one could discuss distributed
+algorithms in terms of the dependencies between the events making
+up the system execution. For example, suppose a process first sets some
+variable x to 3, and then sets y = x.
+T h e event corresponding to the latter operation would d e p e n d on the
+former o n e - - a n example of a local
+dependency. Similarly, receiving a
+message depends on sending it. This
+view of a system leads one to define
+the potential causality relationship between events in the system. It is the
+irreflexive transitive closure of the
+message send-receive relation and
+the local dependency relation for
+processes in the system. If event a
+happens before event b in a distributed system, the causality relation
+will capture this.
+I n Lamport's view of time, we
+would say that two events are concurrent if they are not causally related:
+the issue is not whether they actually
+executed simultaneously in some r u n
+of the system, but whether the system
+was sensitive to their respective ordering. Given an execution of a system, there exists a large set of equivalent executions arrived at by
+rescheduling
+concurrent
+events
+
+¢OIMIMUNICATIONSOFTHIEAC:NI
+
+December 1993/Vol,36, Nos12
+
+41
+
+Business
+
+Computing
+
+v
+
+while retaining the event o r d e r i n g
+constraints represented by causality
+relation. T h e key observation is that
+
+the causal ,event ordering captures all the
+essential ordering information needed to
+describe the execution: any two physical
+execution.s with the same causal
+event o r d e r i n g describe indistinguishable runs o f the system.
+Recall o u r use o f the phrase
+"reaching all o f its members at the
+same time." L a m p o r t has suggested
+that for a system described in terms
+o f a causal event ordering, any set of
+concurrent events, one p e r process,
+can be thought of as representing a
+logical instant in time. Thus, when
+we say that all members o f a g r o u p
+receive a message at the same time,
+we mean that the message delivery
+events are concurrent and totally
+o r d e r e d with respect to g r o u p membership c]hange events. Causal dependency provides the fundamental
+notion o f time in a distributed system, and plays an i m p o r t a n t role in
+the r e m a i n d e r o f this section.
+Message delivery ordering. Consider Figure 4, part (A), in which
+messages mb m2, m 3 and m 4 are sent
+to a group consisting o f processes Sl,
+s2, and ss. Messages ml and m~ are
+sent concurrently and are received in
+different orders by s2 and ss. In many
+applications, s2 and ss would behave
+in an uncoordinated or inconsistent
+m a n n e r if this occurred. A designer
+must, therefore, anticipate possible
+inconsistent message ordering. For
+example, one might design the application to tolerate such mixups, or
+explicitly prevent them from occurring by delaying the processing o f ml
+and m 2 within the p r o g r a m until an
+o r d e r i n g has been established. T h e
+real d a n g e r is that a designer could
+overlook tlhe whole i s s u e - - a f t e r all,
+two simultaneous messages to the
+p r o g r a m tlhat arrive in different sequences may seem like an improbable s c e n a r i o - - y i e l d i n g an application that usually is correct, but may
+exhibit abnormal behavior when unlikely sequences o f events occur, or
+u n d e r periods o f heavy load. ( U n d e r
+load, multicast delivery latencies rise,
+increasing the probability that conc u r r e n t multicasts could overlap).
+This is only one o f several delivery
+o r d e r i n g problems illustrated in Figure 4. Consider the situation when s3
+
+42
+
+December 1993/Vol.36, No.12 C O N N U N I C A Y I O H |
+
+receives message m3. Message ms was
+sent by s] after receiving m2, and
+might refer to or d e p e n d on m 2. For
+example, m 2 might authorize a certain broker to trade a particular account, and m3 could be a trade the
+broker has initiated on behalf o f that
+account. O u r execution is such that ss
+has not yet received m2 when ms is
+delivered. Perhaps m2 was discarded
+by the operating system due to a lack
+o f buffering space. It will be retransmitted, but only after a brief delay
+d u r i n g which ms might be received.
+Why might this matter? Imagine
+that ss is displaying buy/sell orders on
+the trading floor, ss will consider ms
+invalid, since it will not be able to
+confirm that the trade was authorized. A n application with this problem might fail to carry out valid trading requests. Again, although the
+problem is solvable, the question is
+whether the application designer will
+have anticipated the problem and
+p r o g r a m m e d a correct mechanism to
+compensate when it occurs.
+In o u r work on ISIS, this problem
+is solved by incl.uding a context record on each message. I f a message
+arrives out o f order, this record can
+be used to detect the condition, and
+to delay delivery until prior messages
+arrive. T h e context representation
+we employ has size linear in the number o f members o f the g r o u p within
+which the message is sent (actually, in
+the worst case a message might carry
+multiple such context records, but
+this is extremely rare). However, the
+average size can be greatly r e d u c e d
+by taking advantage o f repetitious
+communication patterns, such as the
+tendency o f a process that sends to a
+g r o u p to send multiple messages in
+succession [11]. T h e imposed overhead is variable, but on the average
+small. O t h e r solutions to this problem are described in [9, 26].
+Message m4 exhibits a situation
+that combines several o f these issues.
+m4 is sent by a process that previously
+sent m] and is concurrent with m2, ms,
+and a m e m b e r s h i p change o f the
+group. One sees here a situation in
+which all o f the o r d e r i n g issues cited
+thus far arise simultaneously, and in
+which failing to address any o f them
+could lead to errors within an important class o f applications. As shown,
+only the g r o u p addressing p r o p e r t y
+
+Olin ? H I I A C I N
+
+p r o p o s e d in the previous section is
+violated: were m4 to trigger a concurrent database search, process Sl
+would search the first third o f the
+database, while s~ searches the second ha/f--one-sixth o f the database
+would not be searched. However, the
+figure could easily be changed to
+simultaneously violate other o r d e r ing properties.
+
+State transfer. Figure 4, part (B)
+illustrates a slightly different problem. Here, we wish to transfer the
+state o f the service to process s3: perhaps ss represents a p r o g r a m that
+has restarted after a failure (having
+lost prior state) o r a server that has
+been a d d e d to redistribute load. Intuitively, the state o f the server will
+be a data structure reflecting the data
+m a n a g e d by the service, as modified
+by the messages received prior to
+when the new m e m b e r j o i n e d the
+group. However, in the execution
+shown, a message has been sent to
+the server concurrent with the membership change. A consequence is
+that ss receives a state which does not
+reflect message m4, leaving it inconsistent with Sl and s2. Solving this
+problem involves a complex synchronization algorithm (not presented
+here), probably beyond the ability o f
+a typical distributed applications programmer.
+Fault tolerance. U p to now, o u r
+discussion has ignored failures. Failures cause many problems; here, we
+consider j u s t one. Suppose the
+sender o f a message were to crash
+after some, but not all, destinations
+receive the message. T h e destinations that do have a copy will need to
+complete the transmission or discard
+the message. T h e protocol used
+should achieve "exactly-once delivery" o f each message to those destinations that remain operational, with
+b o u n d e d overhead and storage.
+Conversely, we need not be concerned with delivery to a process that
+fails d u r i n g the protocol, since such a
+process will never be h e a r d from
+again (recall the fail-stop model).
+Protocols to solve this problem can
+be complex, but a fairly simple solution will illustrate the basic techniques. This protocol uses three
+rounds o f RPCs as illustrated in Figure 5. During the first round, the
+
+sender sends the message to the destinations, which acknowledge receipt. Although the destinations can
+deliver the message at this point, they
+need to keep a copy: should the
+sender fail d u r i n g the first round,
+the destination processes that have
+received copies will need to finish the
+protocol on the sender's behalf. In
+the second round, if no failure has
+occurred, then the sender tells all
+destinations that the first r o u n d has
+finished. T h e y acknowledge this
+message and make a note that the
+sender is entering the third round.
+During the third round, each destination discards all information about
+the m e s s a g e - - d e l e t i n g the saved
+copy of the message and any other
+data it was maintaining.
+When a failure occurs, a process
+that has received a first- or secondr o u n d message can terminate the
+protocol. T h e basic idea is to have
+some m e m b e r o f the destination set
+take over the r o u n d that the sender
+was r u n n i n g when it failed; processes
+that have already received messages
+in that r o u n d detect duplicates and
+respond to them as they r e s p o n d e d
+after the original reception. T h e protocol is straightforward, and we leave
+the details to the reader.
+This t h r e e - r o u n d multicast protocol does not obtain any form of pipelined or asynchronous data flow
+when invoked many times in succession, and the use o f RPC limits the
+degree of communication concurrency d u r i n g each r o u n d (it would be
+better to send all the messages at
+once, and to collect the replies in parallel). These features make the protocol expensive. Much better solutions have been described in the
+literature (see [9, 11] for more detail
+on the a p p r o a c h used in ISIS, and
+for a summary of other work in the
+area).
+Recall that in the subsection "Conventional Message-Passing Technologies," we indicated that systemwide
+agreement on membership was an
+i m p o r t a n t p r o p e r t y o f our overall
+approach. It is interesting to realize
+that a protocol such as this is greatly
+simplified because failures are rep o r t e d consistently to all processes in
+the system. If failure detection were
+by an inconsistent mechanism, it
+would be very difficult to convince
+
+C
+
+S1
+
+S2
+
+$1 $2
+
+S3
+
+$3
+M
+
+TliE
+M5
+
+M4
+r
+
+n
+
+r
+
+(B)
+
+(A)
+
+S.
+
+$2
+
+S3
+
+B
+OK to deliver message
+
+Round1
+
+J
+
+J
+Acknowledge, no other action
+
+Round 2
+
+J
+
+J
+
+Round 3
+
+OK to garbage collect
+
+oneself that the protocol is correct
+(indeed, as stated, the protocol could
+deliver duplicates if failures are rep o r t e d inaccurately). T h e merit o f
+solving such a problem at a low level
+is that we can then make use of the
+consistency properties of the solution
+when reasoning about protocols that
+react to failures.
+
+F i g u r e 4. M e s s a g e - o r d e r i n g
+problems
+F i g u r e S. T h r e e - r o u n d reliable
+multicast
+
+Summary of issues. T h e previous
+discussion pointed to some of the
+potential pitfalls that confront the
+developer of g r o u p software working
+over a conventional operating system: (1) weak s u p p o r t for reliable
+communication, notably inconsistency in the situations in which channels break, (2) g r o u p address expansion, (3) delivery o r d e r i n g for
+concurrent messages, (4) delivery
+o r d e r i n g for sequences of related
+messages, (5) state transfers, and
+(6) failure atomicity. This list is not
+exhaustive: we have overlooked
+questions involving real-time delivery guarantees, and persistent data-
+
+COMMUNICATIONSOF THE ACM December 1993/Vol.36, No.12
+
+43
+
+bases and files. However, o u r work
+on ISIS treats process g r o u p issues
+u n d e r the assumption that any realtime deadlines are long c o m p a r e d to
+communication latencies, and that
+process states are volatile, hence we
+view these issues as beyond the scope
+o f the c u r r e n t article. 5 T h e list does
+cover the major issues that arise in
+this more restrictive domain. [5]
+At the beginning o f this section,
+we asserted that m o d e r n operating
+
+plexity associated with working out
+the solutions and integrating them in
+a single system will be a significant
+barrier to application developers.
+T h e only practical a p p r o a c h is to
+solve these problems in the distributed computing environment itself,
+or in the operating system. This permits a solution to be engineered in a
+way that will give good, predictable
+p e r f o r m a n c e and takes full advantage o f h a r d w a r e and operating sys-
+
+virtual synchrony, motivated by p r i o r
+work on transaction serializability.
+We will present the a p p r o a c h in two
+stages. First, we discuss an execution
+model called close synchrony. This
+model is then relaxed to arrive at the
+virtual synchrony model. A comparison of o u r work with the serializability model appears in the section
+"ISIS and O t h e r Distributed Computing Technologies." T h e basic idea
+is to encourage p r o g r a m m e r s to assume a closely synchronized style o f
+distributed execution [ 10, 31 ]:
+Execution o f a process consists o f a
+sequence o f events, which may be
+internal computation, message transmissions, message deliveries, o r
+changes to the m e m b e r s h i p o f
+groups that it creates or joins.
+• A global execution o f the system
+consists o f a set o f process executions. At the global level, one can talk
+about messages sent as multicasts to
+process groups.
+• Any two processes that receive the
+same multicasts or observe the same
+g r o u p m e m b e r s h i p changes see the
+c o r r e s p o n d i n g local events in the
+same relative order.
+• A multicast to a process g r o u p is
+delivered to its full membership. T h e
+send and delivery events are considered to occur as a single, instantaneous event.
+
+•
+
+I S i S TOOLS a t P r o c e s s G r o u p L e v e l
+Process groups: Create, delete, join (transferring state).
+Group multlcast: CBCAST, ABCAST, collecting 0, 1 QUORUM o r ALL replies (0 replies gives an asynchronous multicast).
+Synchronization: LoCking, with symbolic strings to represent locks. Deadlock
+detection or avoidance must be addressed at the application level. Token passing.
+Replicated data: implemented by broadcasting updates to group having copIes. Transfer values to processes that join using state transfer facility. Dynamic
+system reconfiguratlon using replicated configuration data. Checkpoint/update
+logging, spooling for state recovery after failure.
+Monltorlrtg facilities: Watch a process or site, trigger actions after failures and
+recoveries. Monitor changes to process group membership, site failures, and
+so f o r t h .
+Distributed execution facilities: Redundant computation (all take same action).
+Subdivided among multiple servers. Coordinator-cohort (primary/backup).
+Automated recovery: When a site recovers, Programs automatically restart.
+For the first site to recover, group state is restored from logs (or initialized by
+software). For other sites, a process group join and transfer state is initiated.
+WAN communication: Reliable long-haul message passing and file transfer facility.
+
+systems lack the tools n e e d e d to develop group-based software. This
+assertion goes beyond standards such
+as Unix to include next-generation
+systems such as NT, Mach, C H O R U S
+and Amoeb;a. 6 A basic premise o f this
+article is that, although all o f these
+problems can be solved, the c o r n 5 These issues can be addressed within the tools
+layer of ISIS, a n d in fact the c u r r e n t system includes an optional subsystem for m a n a g e m e n t
+of persistent data.
+6Mach IPC provides strong g u a r a n t e e s o f reliability in its communication subsystem. However, Mach may experience u n b o u n d e d delay
+when a n o d e failure occurs. C H O R U S includes
+a p o r t - g r o u p mechanism, but with weak semantics, p a t t e r n e d .after earlier work on the V system [15]. Amoeba, which initially lacked g r o u p
+support, has recently been extended to a mechanism a p p a r e n t l y motivated by o u r work on
+
+ISIS [19].
+
+4
+
+tem features. F u r t h e r m o r e , providing process groups as an underlying
+tool permits the p r o g r a m m e r to concentrate on the problem at hand. I f
+the implementation of process
+groups is left to the application designer, nonexperts are unlikely to
+use the approach. T h e b r o k e r a g e
+application o f the introduction
+would be extremely difficult to build
+using the tools provided by a conventional operating system.
+Virtual
+
+Synchrony
+
+It was observed earlier in this article
+that integration o f g r o u p p r o g r a m ming mechanisms into a single envir o n m e n t is also an i m p o r t a n t problem. O u r work addresses this issue
+t h r o u g h an execution model called
+
+December 1993/Vol.36,No.12¢OMMUNICATIOHSOP THIEA¢IM
+
+Close synchrony is a powerful
+guarantee. In fact, as seen in Figure
+6, it eliminates all the problems identified in the preceding section:
+
+Weak communication reliability guarantees: A closely synchronous com•
+
+munication subsystem appears to the
+p r o g r a m m e r as completely reliable.
+• Group address expansion: In a closely
+synchronous execution, the m e m b e r ship o f a process g r o u p is fixed at the
+logical instant when a multicast is
+delivered.
+• Delivery ordering for concurrent messages: In a closely synchronous exe-
+
+cution, concurrently issued multicasts are distinct events. T h e y would,
+therefore, be seen in the same o r d e r
+by any destinations they have in common.
+
+* Delivery ordering for sequences of related messages: In Figure 6, part (A),
+process Sl sent message ms after re-
+
+Business
+
+ceiving m2, hence m3 may be causally
+d e p e n d e n t on ms. Processes executing in a closely synchronous model
+would never see anything inconsistent with this causal d e p e n d e n c y relation.
+• State transfer: State transfer occurs
+at a well-defined instant in time in
+the model. If a g r o u p m e m b e r
+checkpoints the g r o u p state at the
+instant when a new m e m b e r is
+added, or sends something based on
+the state to the new member, the
+state will be well defined and complete.
+• Failure atomicity: T h e close synchrony model treats a multicast as a
+single logical event, and reports failures t h r o u g h g r o u p membership
+changes that are o r d e r e d with respect to multicast. T h e all or nothing
+behavior of an atomic multicast is
+thus implied by the model.
+Unfortunately, although closely
+synchronous execution simplifies
+distributed application design, the
+a p p r o a c h cannot be applied directly
+in a practical setting. First, achieving
+close synchrony is impossible in the
+presence of failures. Say that processes s] and s2 are in g r o u p G and
+message m is multicast to G. Consider
+Sl at the instant before it delivers m.
+According to the close synchrony
+model, it can only deliver m if sz will
+do so also. But sl has no way to be
+sure that s2 is still operational, hence
+s~ will be unable to make progress
+[36]. Fortunately, we can finesse this
+issue: if s2 has failed, it will hardly be
+in a position to dispute the assertion
+that m was delivered to it first!
+A second concern is that maintaining close synchrony is expensive. T h e
+simplicity o f the a p p r o a c h stems in
+part from the fact that the entire
+process g r o u p advances in lockstep.
+But, this also means that the rate of
+progress each g r o u p m e m b e r can
+make is limited by the speed o f the
+other members, and this could have a
+huge performance impact. What is
+needed is a model with the conceptual simplicity o f close synchrony, but
+that is capable o f efficiently supporting very high t h r o u g h p u t applications.
+In distributed systems, high
+t h r o u g h p u t comes from asynchronous
+interactions: patterns o f execution in
+
+Sl
+
+02
+
+®
+
+Computing
+
+S2
+
+S 1 S2
+
+S3
+
+$3
+M1
+
+Ms
+
+M
+
+Time
+
+Ma - ~
+M~
+,,
+
+Crash
+
+(B)
+
+(A)
+
+P1
+M1
+
+$1
+
+M2
+Time
+
+M3
+M4
+Ms
+
+which the sender o f a message is permitted to continue executing without
+waiting for delivery. A n asynchronous a p p r o a c h treats the communications system like a b o u n d e d buffer,
+blocking the sender only when the
+rate of data production exceeds the
+rate of consumption, or when the
+sender needs to wait for a reply or
+some other input (Figure 7). T h e
+advantage o f this a p p r o a c h is that the
+latency (delay) between the sender
+and the destination does not affect
+the data transmission r a t e - - t h e system operates in a pipelined manner,
+permitting both the sender and destination to remain continuously active. Closely synchronous execution
+precludes such pipelining, delaying
+execution o f the sender until the
+message can be delivered.
+This motivates the virtual synchrony approach. A virtually synchronous system permits asynchronous executions for which there
+exists some closely synchronous execution indistinguishable from the
+
+Figure 6. ClOSelysynchronous
+execution
+Figure 7. Asynchronous pipelining
+
+COMMUNICATIONSOII THI iI¢M December 1993/Vol.36,No,12
+
+4S
+
+0
+
+Business
+
+asynchronous one. In general, this
+means that for each application,
+events need to be synchronized only
+to the degree that the application is
+sensitive to event ordering. In some
+situations, this approach will be identical to close synchrony. In others, it
+is possible to deliver messages in different orders at different processes,
+without the application noticing.
+When such a relaxation of order is
+permissible, a more asynchronous
+execution results.
+Order sensitivity in distributed systems. We are led to a final technical
+question: "when can synchronization
+be relaxed in a virtually synchronous
+distributed system?" Two forms of
+ordering t u r n out to be useful; one is
+"stronger" than the other, but also
+more costly to support.
+Consider a system with two processes, Sl and s2, sending messages
+into a group G with members g~ and
+g2. sl sends message m] to G and, concurrently, sz sends m2. In a closely
+synchronous system, g] and g2 would
+receive these messages in identical
+orders. If, for example, the messages
+caused updates to a data structure
+replicated within the group, this
+property could be used to ensure
+that the replicas remain identical
+through tlhe execution of the system.
+A multicast with this property is said
+to achieve an atomic delivery ordering,
+and is denoted ABCAST. ABCAST
+is an easy primitive to work with, but
+costly to implement. This cost stems
+from the tollowing consideration: An
+ABCAST message can only be delivered when it is known that no prior
+ABCAST remains undelivered. This
+introduce,; latency: messages ml and
+m2 must he delayed before they can
+be delivered to g] and g,2. Such a delivery latency may not be visible to
+the application. But, in cases in which
+s~ and s2 need responses from gl and/
+or g2, or where the senders and destinations are the same, the application
+will experience a significant delay
+each time an ABCAST is sent. T h e
+latencies involved can be very high,
+d e p e n d i n g on how the ABCAST
+protocol is. engineered.
+Not all applications require such a
+strong, costly, delivery ordering.
+C o n c u r r e n t systems often use some
+form of synchronization or mutual
+
+46
+
+Computing
+
+exclusion mechanism to ensure that
+conflicting operations are performed
+in some order. In a parallel s h a r e d memory environment, this is normally done
+using semaphores
+a r o u n d critical sections of code. In a
+distributed system, it would normally
+be done by using some form of locking or token passing. Consider such a
+distributed system, having the property that two messages can be sent
+concurrently to the same group only
+
+when their effects on the group are independent. In the preceding example,
+either Sl and s2 would be prevented
+from sending concurrently (i.e., if ml
+and m2 have potentially conflicting
+
+S~
+
+S2
+
+M1
+
+Figure 8. Causal ordering
+
+effects on the states of the members
+of G), or if they are permitted to send
+concurrently, the delivery orders
+could be arbitrarily interleaved, because the actions on receiving such
+messages commute.
+It might seem that the degree of
+delivery ordering needed would be
+first-in, first-out, (FIFO). However,
+this is not quite right, as illustrated in
+Figure 8. Here we see a situation in
+which s], holding mutual exclusion,
+sends message ml, but then releases
+its mutual exclusion lock to s2, which
+sends m2. Perhaps, m] and m2 are
+updates to the same data item; the
+order of delivery could therefore be
+quite important. Although there is
+certainly a sense in which ml was sent
+"first," notice that a FIFO delivery
+order would not enforce the desired
+ordering, since FIFO order is usually
+defined for a (sender, destination)
+pair, and here we have two senders.
+T h e ordering property needed for
+this example is that if mr causally precedes m2, then ml should be delivered before m2 at shared destina-
+
+December 1993/Vol.36, No.12COmMUNlCA~'|OHSO,THIACM
+
+tions, corresponding to a multicast
+primitive denoted CBCAST. Notice
+that CBCAST is weaker than ABCAST, because it permits messages
+that were sent concurrently to be delivered to overlapping destinations in
+different sequences. 7
+T h e major advantage of CBCAST
+over ABCAST is that it is not subject
+to the type of latency cited previously. A CBCAST message can be
+delivered as soon as any prior messages have been delivered, and all the
+information needed to determine
+whether any prior messages are outstanding can be included, at low
+overhead, on the CBCAST message
+itself. Except in u n u s u a l cases where
+a prior message is somehow delayed
+in the network, a CBCAST message
+will be delivered immediately on receipt.
+T h e ability to use a protocol such
+as CBCAST is highly dependent on
+the nature of the application. Some
+applications have a mutual exclusion
+structure for which causal delivery
+ordering is adequate, while others
+would need to introduce a form of
+locking to be able to use CBCAST
+instead of ABCAST. Basically,
+CBCAST can be used when any conflicting multicasts are uniquely ordered along a single causal chain. I n
+this case, the CBCAST guarantee is
+strong e n o u g h to ensure that all the
+conflicting multicasts are seen in the
+same order by all r e c i p i e n t s - specifically, the causal dependency
+order. Such an execution system is
+virtually synchronous, since the outcome of the execution is the same as
+if an atomic delivery order had been
+used.
+T h e CBCAST communication
+pattern arises most often in a process
+group that manages replicated (or
+coherently cached) data using locks
+to order updates. Processes that update such data first acquire the lock,
+then issue a stream of asynchronous
+updates, and then release the lock.
+7The statement that CBCAST is "weaker" than
+ABCAST may seem imprecise: as we have
+stated the problem, the two protocols simply
+provide different forms of ordering. However,
+the ISIS version of ABCAST actually extends
+the partial CBCAST ordering into a total one: it
+is a causal atomic muhicast primitive. An argument can be made that an ABCAST protocol
+that is not causal cannot be used asyuchronously, hence we see strong reasons for implementing ABCAST in this manner.
+
+T h e r e will generally be one update
+lock for each class o f related data
+items, so that acquisition of the update lock rules out conflicting updates. 8 However, mutual exclusion
+can sometimes be inferred from
+other properties o f an algorithm,
+hence such a pattern may arise even
+without an explicit locking stage. By
+using CBCAST for this communication, an efficient, pipelined data flow
+is achieved. In particular, there will
+be no need to block the sender of a
+multicast, even momentarily, unless
+the group membership is changing at
+the time the message is sent.
+T h e tremendous performance
+advantage of CBCAST over ABCAST may not be immediately evident. However, when one considers
+how fast m o d e r n processors are in
+comparison with communication
+devices, it should be clear that any
+primitive that unnecessarily waits
+before delivering a message could
+introduce substantial overhead. For
+example, it is c o m m o n for an application that replicates a table o f pending requests within a g r o u p to multicast each new request, so that all
+members can maintain identical copies of the table. In such cases, if the
+way that a request is h a n d l e d is sensitive to the contents o f the table, the
+sender o f the multicast must wait
+until the multicast is delivered before
+acting on the request. Using ABCAST the sender will need to wait
+until the delivery o r d e r can be determined. Using CBCAST, the update
+can be issued asynchronously, and
+applied immediately to the copy
+maintained by the sender. T h e
+sender thus avoids a potentially long
+delay, and can immediately continue
+computation or reply to the request.
+W h e n a sender generates bursts of
+updates, also a c o m m o n pattern, the
+advantage of CBCAST over ABCAST is even greater, because multiple messages can be buffered and
+
+s In ISIS applications, locks are used primarily
+for mutual exclusion o n possibly conflicting
+operations, such as updates on related data
+items. In the case of replicated data, this results
+in an algorithm similar to a primary copy update in which the " p r i m a r y " copy changes dynamically. T h e execution model is nontransactional, a n d there is no need for read-locks or for
+a two-phase locking rule. This is discussed further in the section "ISIS a n d O t h e r Distributed
+C o m p u t i n g Technologies."
+
+sent in one packet, giving a pipelining effect.
+T h e distinction between causal
+and total event orderings (CBCAST
+and ABCAST) has parallels in other
+settings. Although ISIS was the first
+distributed system to enforce a causal
+delivery o r d e r i n g as part of a communication subsystem [7], the approach draws on Lamport's prior
+work on logical notions of time.
+Moreover, the approach was in some
+respects anticipated by work on primary copy replication in database
+systems [6]. Similarly, close synchrony is related both to L a m p o r t
+and Schneider's state machine approach
+to developing distributed software
+[32] and to the database serializability
+model, to be discussed further. Work
+on parallel processor architectures
+has yielded a m e m o r y u p d a t e model
+called weak consistency [16, 35], which
+uses a causal d e p e n d e n c y principle to
+increase parallelism in the cache of a
+parallel processor. And, a causal correctness p r o p e r t y has been used in
+work on lazy update in shared memory multiprocessors [1] and distributed database systems [18, 20]. A
+m o r e detailed discussion o f the conditions u n d e r which CBCAST can be
+used in place of A B C A S T appears in
+[10, 31].
+
+Summary of Benefits Due to Virtual
+Synchrony
+Brevity precludes a more detailed
+discussion o f virtual synchrony, or
+how it is used in developing distributed algorithms within ISIS. It may
+be useful, however, to summarize the
+benefits of the model:
+• Allows code to be developed assuming a simplified, closely synchronous execution model;
+• Supports a meaningful notion o f
+group state and state transfer, both
+when groups manage replicated
+data, and when a computation is
+dynamically
+partitioned
+among
+group members;
+• Asynchronous, pipelined communication;
+• T r e a t m e n t of communication, process g r o u p membership changes and
+failures t h r o u g h a single, eventoriented execution model;
+• Failure handling t h r o u g h a consistently presented system membership
+
+list integrated with the communication subsystem. This is in contrast to
+the usual a p p r o a c h of sensing failures t h r o u g h timeouts and broken
+channels, which does not guarantee
+consistency.
+T h e a p p r o a c h also has limitations:
+• Reduced availability d u r i n g LAN
+partition failures: only allows progress in a single partition, and hence
+tolerates at most Ln/2J - 1 simultaneous failures, if n is the n u m b e r of
+sites currently operational;
+• Risks incorrectly classifying an
+operational site or process as faulty.
+T h e virtual synchrony model is
+unusual in offering these benefits
+within a single framework. Moreover, theoretical arguments exist that
+no system that provides consistent
+distributed behavior can completely
+evade these limitations. O u r experience has been that the issues addressed by virtual synchrony are encountered in even the simplest
+distributed applications, and that the
+a p p r o a c h is general, complete, and
+theoretically sound.
+
+The ISiS TOOlkit
+T h e ISIS toolkit provides a collection
+of higher-level mechanisms for
+forming and managing process
+groups and implementing groupbased software. This section illustrates the specifics of the a p p r o a c h
+by discussing the styles o f process
+groups s u p p o r t e d by the system and
+giving a simple example o f a distributed database application.
+ISIS is not the first system to use
+process groups as a p r o g r a m m i n g
+tool: at the time the system was initially developed, Cheriton's V system
+had received wide visibility [15].
+More recently, g r o u p mechanisms
+have become common, exemplified
+by the A m o e b a system [19], the
+C H O R U S operating system [26], the
+Psync system [29], a high availability
+system developed by Ladin and Liskov [20], IBM's AAS system [14], and
+Transis [3]. Nonetheless, ISIS was
+first to propose the virtual synchrony
+model and to offer high-performance, consistent solutions to a wide
+variety of problems t h r o u g h its toolkit. T h e a p p r o a c h is now gaining
+wide acceptance. 9
+
+ClOMMUHICATION|
+
+oF'rill
+
+ACM
+
+December 1993/Vol.36, No.12
+
+4'/
+
+Server
+
+Peer
+group
+
+Client
+
+Diffusion
+group
+
+Client server group
+
+F i g u r e S. S t y l e s o f g r o u p s
+
+Hierarchical
+group
+
+the group addressing protocol.
+
+Diffusion groups: A diffusion group is a
+Styles of Groups
+
+client-server group in which the clients register themselves but in which
+the members of the group send messages to the full client set and the clients are passive sinks.
+Hierarchical groups: A hierarchical
+group is a structure built from multiple c o m p o n e n t groups, for reasons
+of scale. Applications that use the
+hierarchical group initially contact its
+root group, but are subsequently redirected to one of the constituent
+"subgroups." Group data would normally be partitioned a m o n g the subgroups. Although tools are provided
+for multicasting to the full membership of the hierarchy, the most common communication pattern involves
+interaction between a client and the
+members of some subgroup.
+
+T h e efficiency of a distributed system is limited by the information
+available to the protocols employed
+for communication. This was a consideration in developing the ISIS
+process group interface, in which a
+trade-off had to be made between
+simplicity of the interface and the
+availability of accurate information
+about group membership for use in
+multicast address expansion. Consequently, the ISIS application interface introduces four styles of process
+groups that differ in how processes
+interact with the group, illustrated in
+Figure 9 (anonymous groups are not
+distinguished from explicit groups at
+this level of the system). ISIS is optimized to detect and handle each of
+these cases efficiently. T h e four
+styles of process groups are:
+
+T h e r e is no requirement that the
+members of a group be identical, or
+even coded in the same language or
+executed on the same architecture.
+Moreover, multiple groups can be
+overlapped and an individual process can belong to as many as several
+h u n d r e d different groups, although
+this is u n c o m m o n . Scaling is discussed later in this article.
+
+Peer groups: These arise where a set
+of processes cooperate closely, for
+example, to replicate data. The
+membership is often used as an input
+to the algorithm used in handling
+requests, as for the concurrent database search described earlier.
+Client-server groups: In ISIS, any process can communicate with any
+group given the group's name and
+appropriate permissions. However,
+if a n o n m e m b e r of a group will multicast to it repeatedly, better performance is obtained by first registering
+the sender as a client of the group;
+this permits the system to optimize
+
+The Toolkit Interface
+
+9At the time of this writingour group is work-
+
+ing with the Open Software Foundationon integration of a new version of the technology
+into Mach (the OSF 1/AD version) and with
+Unix International, which plans a reliable
+group mechanismfor UI Atlas.
+
+48
+
+December 1993/Vo1.36, No.12
+
+COMMUNICA/IOHS
+
+As noted earlier, the performance of
+a distributed system is often limited
+by the degree of communication
+pipelining achieved. T h e development of asynchronous solutions to
+distributed problems can be tricky,
+and many ISIS users would rather
+employ less efficient solutions than
+risk errors. For this reason, the toolkit includes asynchronous implementations of the more important
+distributed
+programming
+para-
+
+OF THE ACM
+
+digms. These include a synchronization tool that supports a form of
+locking (based on distributed tokens), a replication tool for managing replicated data, a tool for faulttolerant primary-backup server design that load-balances by making
+different group members act as the
+primary for different requests, and
+so forth (a partial list appears in the
+sidebar "ISIS Tools at a Process
+Group Level)," Using these tools,
+and following p r o g r a m m i n g examples in the ISIS manual, even nonexperts have been successful in developing fault-tolerant, highly asynchronous distributed software.
+Figures 10 and 11 show a complete, fault-tolerant database server
+for maintaining a m a p p i n g from
+names (ascii strings) to salaries (integers). T h e example is in the C
+p r o g r a m m i n g language. T h e server
+initializes ISIS and declares the procedures that will handle update and
+inquiry requests. T h e isis_rrlsX.nloop
+dispatches incoming messages to
+these procedures as needed (other
+styles of main loop are also supported). T h e formatted-I/O style of
+message generation and scanning is
+specific to the C interface, where
+type information is not available at
+r u n time.
+T h e "state transfer" routines are
+concerned with sending the current
+contents of the database to a server
+that has just been started and is joining the group. In this situation, ISIS
+arbitrarily selects an existing server
+to do a state transfer, invoking its
+state sending procedure. Each call
+that this procedure makes to
+xfer_out will cause an invocation of
+rcv_state on the receiving side; in
+our example, the latter simply passes
+the message to the update procedure
+(the same message format is used by
+sen6__state and update). O f course,
+there are many variants on this basic
+scheme. For example, it is possible to
+indicate to the system that only certain servers should be allowed to
+handle state transfer requests, to refuse to allow certain processes to join,
+and so forth. T h e client program
+does a pg_looRup to find the server.
+Subsequently, calls to its query and
+update procedures are mapped into
+messages to the server. T h e BCAST
+calls are mapped to the appropriate
+
+Business
+
+Computing
+
+Figure 10. A simple database
+server
+Figure 11. A client of t h e simple
+database service
+
+default for the g r o u p - - A B C A S T in
+this case.
+T h e database server of Figure 10
+uses a r e d u n d a n t style of execution
+in which the client broadcasts each
+request and will receive multiple,
+identical replies from all copies. In
+practice, the client will wait for the
+first reply and ignore all others. Such
+an approach provides the fastest possible reaction to a failure, but has the
+disadvantage o f consuming n times
+the resources of a fault-intolerant
+solution, where n is the size o f the
+process group. An alternative would
+have been to subdivide the search so
+that each server performs 1/n'th o f
+the work. Here, the client would
+combine responses from all the servers, repeating the request if a server
+fails instead of replying, a condition
+readily detected in ISIS.
+ISIS interfaces have been developed for C, C+ +, Fortran, C o m m o n
+Lisp, A d a and Smalltalk, and ports o f
+ISIS exist for Unix workstations and
+mainframes from all major vendors,
+as well as for Mach, CHORUS, ISC
+and SCO Unix, the DEC VMS system, and Honeywell's Lynx operating system. Data within messages is
+represented in the binary format
+used by the sending machine, and
+converted to the format of the destination on receipt (if necessary), automatically and transparently.
+W h o Uses ISIS, and How?
+Brokerage
+A n u m b e r of ISIS users are concerned with financial computing systems such as the one cited at the beginning of this article. Figure 12
+illustrates such a system, now seen
+from an internal perspective in
+which groups underlying the services
+employed by the b r o k e r become evident. A client server architecture is
+used, in which the servers filter and
+analyze streams o f data. Fault-tolerance here refers to two very different
+aspects of the application. First, financial systems must rapidly restart
+failed components and reorganize
+themselves so that service is not in-
+
+¢OIWMUNICATIONS
+
+OPTHE ACM
+
+December 1993/Vol.36, No.12
+
+49
+
+Business
+
+t e r r u p t e d by software or hardware
+failures. Second, there are specific
+system functions that require faulttolerance at the level o f files or database, such as a guarantee that after
+rebooting, a file or database m a n a g e r
+will be able to recover local data files
+at low cost. ISIS was designed to address the first type o f problem, but
+includes several tools for solving the
+latter one.
+T h e a p p r o a c h generally taken is to
+represent key services using process
+groups, replicating service state information so that even if one server
+process fails the other can r e s p o n d to
+requests on its behalf. During periods when n service programs are
+operational, one can often exploit
+the r e d u n d a n c y to improve response
+time; thus, rather than asking how
+much such an application must pay
+for fault-tolerance, more a p p r o p r i ate questions concern the level o f
+replication at which the overhead
+begins to outweigh the benefits o f
+concurrency, and the m i n i m u m acceptable p e r f o r m a n c e assuming k
+c o m p o n e n t failures. Fault-tolerance
+is something o f a side effect o f the
+replication ;approach.
+A significant theme in financial
+computing is use o f a subscription/
+publication style. T h e basic ISIS
+communication primitives do not
+spool messages for future replay,
+hence an application r u n n i n g over
+the system, the NEWS facility, has
+been developed to s u p p o r t this functionality.
+A final aspect o f brokerage systems is that they require a dynamically varying collection o f services. A
+firm may work with dozens or hund r e d s o f financial models, predicting
+market behavior for the financial instruments being t r a d e d u n d e r varying market conditions. Only a small
+subset o f these services will be
+n e e d e d at any time. Thus, systems o f
+this sort generally consist o f a processor pool on which services can be
+started as necessary, and this creates
+a need to s u p p o r t an automatic remote execution and load balancing
+mechanism. T h e heterogeneity o f
+typical networks complicates this
+problem, by' introducing a patternmatching aspect (i.e., certain programs may be subject to licensing
+restrictions, or require special pro-
+
+~0
+
+Computing
+
+cessors, or may simply have been
+compiled for some specific hardware
+configuration). This problem is
+solved using the ISIS network resource manager, an application described later.
+
+Database Replication and Triggers
+Although the ISIS computation
+model differs from a transactional
+model (see also the section "ISIS and
+O t h e r Distributed C o m p u t i n g Technologies"), ISIS is useful in constructing distributed database applications. In fact, as many as half o f the
+applications with which we are familiar are concerned with this problem.
+Typical uses of ISIS in database
+applications focus on replicating a
+database for fault-tolerance or to
+s u p p o r t concurrent searches for
+i m p r o v e d p e r f o r m a n c e [2]. In such
+an architecture, the database system
+need not be aware that ISIS is present. Database clients access the database t h r o u g h a layer o f software that
+multicasts updates (using ABCAST)
+to the set o f servers, while issuing
+queries directly to the least loaded
+server. T h e servers are supervised by
+a process g r o u p that informs clients
+o f load changes in the server pool,
+and supervises the restart o f a failed
+server from a checkpoint and log o f
+subsequent updates. It is interesting
+to realize that even such an unsophisticated a p p r o a c h to database replication addresses a widely perceived
+need a m o n g database users. In the
+long run, of course, comprehensive
+s u p p o r t for applications such as this
+would require extending ISIS to support a transactional execution model
+and to implement the XA/XOpen
+standards.
+Beyond database replication, ISIS
+users have developed WAN databases by placing a local database system on each LAN in a WAN system.
+By monitoring the update traffic on
+a LAN, updates o f importance to
+remote users can be intercepted and
+distributed t h r o u g h the ISIS WAN
+architecture. On each LAN, a server
+monitors incoming updates and applies them to the database server as
+necessary. To avoid a costly concurrency control problem, developers o f
+applications such as these normally
+partition the database so that the
+data associated with each L A N is di-
+
+December 1993/Vol.36, No.12 ¢ O M M I U I N I C A T I O M | 01 u T H I I A ¢ M
+
+rectly u p d a t e d only from within that
+LAN. On remote LANs, such data
+can only be queried and could be
+stale, but this is still sufficient for
+many applications.
+A final use o f ISIS in database settings is to implement database triggers. A trigger is a query that is incrementally evaluated against the
+database as updates occur, causing
+some action immediately if a specified condition becomes true. For
+example, a b r o k e r might request that
+an alarm be sounded if the risk associated with a financial position exceeds some threshold. As data enters
+the financial database maintained by
+the brokerage, such a query would be
+evaluated repeatedly. T h e role o f
+ISIS is in providing tools for reliably
+notifying applications when such a
+trigger becomes enabled, and for
+developing p r o g r a m s capable o f taking the desired actions despite failures.
+
+Major ISiS-based Utilities
+In the preceding subsection, we alluded to some o f the fault-tolerant
+utilities that have been built over
+ISIS. T h e r e are currently five such
+systems:
+NEWS: This application supports
+a collection o f communication topics
+to which users can subscribe (obtaining a replay o f recent postings) or
+post messages. Topics are identified
+with file-system style names, and
+it is possible to post to topics on a
+remote network using a "mail address" notation; thus, a Swiss brokerage firm might post some quotes to
+
+•
+
+"~GENEVA~QUOTES~IBM@NEW-YORK."
+T h e application creates a process
+g r o u p for each topic, monitoring
+each such g r o u p to maintain a history o f messages posted to it for replay to new subscribers, using a state
+transfer when a new m e m b e r joins.
+• NMGR:
+This p r o g r a m manages
+batch-style jobs and p e r f o r m s load
+sharing in a distributed setting. This
+involves monitoring candidate machines, which are collected into a
+processor pool, and then scheduling
+jobs on the pool. A pattern-matching
+mechanism is used for j o b placement. I f several machines are suitable for a given job, criteria based on
+load and available m e m o r y are used
+
+Historical
+
+Price
+
+qolatility
+
+Analysis and
+database module:
+ut
+)
+
+Trader
+
+BIDIq
+
+",t,,,,
+Data feeds
+
+Monitor
+control
+
+LAN Manager
+
+to select one (these criteria can readily be changed). W h e n employed to
+manage critical system services (as
+opposed to r u n n i n g batch-style jobs),
+the p r o g r a m monitors each service
+and automatically restarts failed
+components. Parallel make is an example o f a distributed application
+p r o g r a m that uses NMGR for j o b
+placement: it compiles applications
+by farming out compilation subtasks
+to compatible machines.
+• DECEIT: This system [33] provides fault-tolerance NFS-compatible
+file storage. Files are replicated both
+to increase p e r f o r m a n c e (by supporting parallel reads on different replicas) and for fault tolerance. T h e level
+of replication is varied d e p e n d i n g on
+the style o f access detected by the system at run time. After a failed node
+recovers, any files it m a n a g e d are
+automatically brought up to date.
+T h e a p p r o a c h conceals file replication from the user, who sees an NFScompatible file-system interface.
+• M E T A / L O M I T A : META is an extensive system for building faulttolerant reactive control applications
+[24, 37]. It consists o f a layer for instrumenting a distributed application
+or environment, by defining s e n s o r s
+and actuators. A sensor is any typed
+value that can be polled or monitored by the system; an actuator is
+any entity capable o f taking an action
+on request. Built-in sensors include
+
+" " " ' • ' Japan,
+• d • Zurich, etc.
+
+Long-haul/WAN Spooler
+
+the load on a machine, the status of
+software and hardware components
+o f the system, and the set o f users on
+each machine. User-defined sensors
+and actuators extend this initial set.
+T h e "raw" sensors and actuators
+of the lowest layer are m a p p e d to abstract sensors by an intermediate
+layer, which also supports a simple
+database-style interface and a triggering facility. This layer supports an
+entity-relation data model and conceals many of the details o f the physical sensors, such as polling frequency
+and fault tolerance. Sensors can be
+aggregated, for example by taking
+the average load on the servers that
+manage a replicated database. T h e
+interface supports a simple trigger
+language, that will initiate a prespecifled action when a specified condition is detected.
+Running over META is a distributed language for specifying control
+actions in high-level terms, called
+L O M I T A . L O M I T A code is embedd e d into the Unix CSH c o m m a n d
+interpreter. At run time, L O M I T A
+control statements are e x p a n d e d into
+distributed finite state machines triggered by events that can he sensed
+local to a sensor or system component; a process g r o u p is used to implement aggregates, p e r f o r m these
+state transitions, and to notify applications when a monitored condition
+arises.
+
+Figure 12. Process g r o u p archit e c t u r e of brokerage system
+
+• S P O O L E R / L O N G - H A U L FACILITY: This subsystem is responsible
+for wide-area communication [23]
+and for saving messages to groups
+that are only active periodically. It
+conceals link failures and presents an
+exactly-once communication interface.
+Other ISiS Applications
+Although this section covered a variety of ISIS applications, brevity precludes a systematic review of the full
+range o f software that has been developed over the system. In addition
+to the problems cited, ISIS has been
+applied
+to
+telecommunications
+switching and "intelligent networking" applications, military systems,
+such as a p r o p o s e d replacement for
+the AEGIS aircraft tracking and
+combat e n g a g e m e n t system, medical
+systems, graphics and virtual reality
+applications, seismology, factory automation and production control,
+reliable m a n a g e m e n t and resource
+scheduling for shared computing
+facilities, and a wide-area weather
+prediction and storm tracking system
+[2, 17, 35]. ISIS has also proved popular for scientific computing at laboratories such as CERN and Los Alamos, and has been applied to such
+
+COMMUNiCATIONSOFTHiACM
+
+December 1993/Vol.36, No.12 S ~
+
+problems as a programming environment for automatically introducing parallelism into data-flow applications [4], a beam focusing system
+for a partic][e accelerator, a weathersimulation that combines a highly
+parallel ocean model with a vectorized atmospheric model and displays output on advanced graphics
+workstations, and resource management software for shared supercomputing facilities.
+It should also be noted that although this article has focused on
+LAN issues, ISIS also supports a
+WAN architecture and has been used
+in WANs composed of up to 10
+LANs. a° Many of the applications
+cited are structured as LAN solutions
+interconnected by a reliable, but less
+responsive, WAN layer.
+
+ISIS and Otl~er Distributed
+Computing Technologies
+Our discussion has overlooked the
+types of real-time issues that arise in
+the Advanced Automation System, a
+next-generation air-traffic control
+system being; developed by IBM for
+the FAA [13, 14], which also uses a
+process-group-based
+computing
+model. Similarly, one might wonder
+how the ISIS execution model compares with transactional database
+execution models. Unfortunately,
+these are complex issues, and it
+would be difficult to do justice to
+them without a lengthy digression.
+Briefly, a technology like the one
+used in AAS differs from ISIS in
+providing strong real-time guarantees provided that timing assumptions are respected. This is done by
+measuring timing properties of the
+network, ha::dware, and scheduler
+on which the system runs and designing protocols to have highly predictable behavior. Given such information about the environment, one
+could undertake a similar analysis of
+the ISIS protocols, although we have
+not done so. As noted earlier, experience suggests that ISIS is fast enough
+~°The WAN architecture o f ISIS is similar to
+the LAN structure, but because WAN partitions
+are m o r e c o m m o n , encourages a m o r e async h r o n o u s p r o g r a m m i n g style. WAN c o m m u n i cation a n d link state is logged to disk files (unlike LAN communication), which enables ISIS
+to retransmit messages lost w h e n a WAN partition occurs a n d to suppress duplicate messages.
+WAN issues are discussed in m o r e detail in [23].
+
+S2
+
+for even very demanding applications. 1
+The relationship between ISIS
+and transactional systems originates
+in the fact that both virtual synchrony and transactional serializability are order-based execution models
+[6]. However, where the "tools" offered by a database system focus on
+isolation of concurrent transactions
+from one another, persistent data
+and rollback (abort) mechanisms,
+those offered in ISIS are concerned
+with direct cooperation between
+members of groups, failure handling, and ensuring that a system can
+dynamically reconfigure itself to
+make forward progress when partial
+failures occur. Persistency of data is a
+big issue in database systems, but
+much less so in ISIS. For example,
+the commit problem is a form of reliable multicast, but a commit implies
+serializability and permanence of the
+transaction being committed, while
+delivery of a multicast in ISIS provides much weaker guarantees.
+
+Conclusions
+We have argued that the next generation of distributed computing systems will benefit from support for
+process groups and group programming. Arriving at an appropriate
+semantics for a process group mechanism is a difficult problem, and
+implementing those semantics would
+exceed the abilities of many distributed application developers. Either
+the operating system must implement these mechanisms or the reliability and performance of groupstructured applications is unlikely to
+be acceptable.
+The ISIS system provides tools for
+programming with process groups.
+A review of research on the system
+leads us to the following conclusions:
+
+I1A process that experiences a timing fault in
+the protocols on which the AAS was originally
+based could receive messages that o t h e r processes reject, or reject messages others accept,
+because the criteria for accepting or rejecting a
+message uses the value o f the local clock [13].
+This can lead to consistency violations. Moreover, i f a fault is transient (e.g., the clock is subsequently resynchronized with o t h e r clocks),
+the inconsistency o f such a process could spread
+if it initiates new multicasts, which o t h e r processes will accept. However, this p r o b l e m can be
+overcome by c h a n g i n g the protocol, a n d the
+a u t h o r u n d e r s t a n d s this to have been d o n e as
+p a r t o f the implementation o f the AAS system.
+
+December 1993/Voi.36,No.12¢ O M M U N I C A T I O N S O F T H | A C M
+
+• Process groups should embody
+strong semantics for group membership, communication, and synchronization. A simple and powerful model
+can be based on closely synchronized
+distributed execution, but high performance requires a more asynchronous style of execution in which communication is heavily pipelined. The
+virtual synchrony approach combines
+these benefits, using a closely synchronous execution model, but deriving a substantial performance
+benefit when message ordering can
+safely be relaxed.
+• Efficient protocols have been developed for supporting virtual synchrony.
+• Nonexperts find the resulting system relatively easy to use.
+This article was written as the first
+phase of the ISIS effort approached
+conclusion. We feel the initial system
+has demonstrated the feasibility of a
+new style of distributed computing.
+As reported in [11], ISIS achieves
+levels of performance comparable to
+those afforded by standard technologies (RPC and streams) on the same
+platforms. Looking to the future, we
+are now developing an ISIS "microkernel" suitable for integration into
+next-generation operating systems
+such as Mach, NT, and CHORUS.
+This new system will also incorporate
+a security architecture [26] and a
+real-time communication suite. The
+programming model, however, will
+be unchanged.
+Process
+group
+programming
+could ignite a wave of advances in
+reliable distributed computing, and
+of applications that operate on distributed platforms. Using current
+technologies, it is impractical for typical developers to implement highreliability software, self-managing
+distributed systems, to employ replicated data or simple coarse-grained
+parallelism, or to develop software
+that reconfigures automatically after
+a failure or recovery. Consequently,
+although current networks embody
+tremendously powerful computing
+resources, the programmers who
+develop software for these environments are severely constrained by a
+deficient software infrastructure. By
+removing these unnecessary obstacles, a vast groundswell of reliable
+
+Business
+
+distributed application development
+can be unleashed.
+
+Acknowledgments
+T h e ISIS effort would not have been
+possible without extensive contributions by many past and present members of the project, users of the system, and researchers in the field of
+distributed computing. T h a n k s are
+due to: Ozaip Babaoglu, Micah Beck,
+T i m Clark, Robert Cooper, Brad
+Glade, Barry Gleeson, Holger Herzog, Guerney Hunt, T o m m y Joseph,
+Ken Kane, Cliff Krumvieda, Jacob
+Levy, Messac Makpangou, Keith
+Marzullo, Mike Reiter, Aleta Ricciardi, Fred
+Schneider, A n d r e
+Schiper, Frank Schmuck, Stefan
+Sharkansky, Alex Siegel, Don Smith,
+Pat
+Stephenson,
+Robbert
+van
+Renesse, and Mark Wood. I n addition, the author also gratefully acknowledges the help of Mauren Robinson, who prepared the original
+figures for this article. []
+
+References
+1. Ahamad, M., Burns, J., Hutto, P. and
+Neiger, G. Causal memory. Tech.
+Rep., College of Computing, Georgia
+Institute of Technology, Atlanta, Ga,
+July 1991.
+2. Allen, T.A., Sheppard, W. and Condon, S. Imis: A distributed query and
+report formatting system. In Proceedings of the SUN Users Group Meeting,
+Sun Microsystems Inc., 1992, pp. 94101.
+3. Amir, Y., Dolev, D., Kramer, S. and
+Malki, D. Transis: A communication
+subsystem for high availability. Tech.
+Rep. TR 91-13, Computer Science
+Dept., The Hebrew University of Jerusalem, Nov. 1991.
+4. Babaoglu, O., Alvisi, L., Amoroso, S.,
+Davoli, R. and Giachini, L.A. Paralex:
+An environment for parallel programming distributed systems. In
+Proceedings of the Sixth ACM International Conference on Supercomputing
+(Washington, D.C., July 1992), pp.
+178-187.
+5. Bache, T.C. et. al. The intelligent
+monitoring system. Bull. Seismological
+Soc. Am. 80, 6 (Dec. 1990), 59-77.
+6. Bernstein, P.A., Hadzilacos, V. and
+Goodman, N. Concurrency Control and
+Recovery in Database Systems. AddisonWesley, Reading, Mass., 1987.
+7. Birman, K.P. Replication and availability in the ISIS system. In Proceedings of the Tenth ACM Symposium on
+Operating Systems Principles (Orcas Is-
+
+Computing
+
+land, Wash. D e c . 1985), ACM
+SIGOPS, pp. 79-86.
+8. Birman, K. and Cooper, R. The ISIS
+project: Real experience with a fault
+tolerant programming system. European SIGOPS Workshop, Sept. 1990.
+To be published in Oper. Syst. Rev.
+(Apr. 1991). Also available as Cornell
+University Computer Science Department Tech. Rep. TR90-1138.
+9. Birman, K.P. and Joseph, T.A. Exploiting virtual synchrony in distributed systems. In Proceedings of the
+Eleventh ACM Symposium on Operating
+Systems Principles (Austin, Tex., Nov.
+1987), ACM SIGOPS, pp. 123-138.
+10. Birman, K. and Joseph, T. Exploiting
+replication in distributed systems. In
+Distributed Systems, Sape Mullender,
+Editor, ACM Press, Addison-Wesley,
+New York, 1989, pp. 319-368.
+11. Birman, K., Schiper, A. and Stephenson, P. Lightweight causal and atomic
+group multicast. ACM Trans. Comput.
+Syst. 9, 3 (Aug. 1991).
+12. Cristian, F. Reaching agreement on
+processor group membership in synchronous distributed systems. Tech.
+Rep. RJ5964, IBM Research Laboratory, March 1988.
+13. Cristian, F., Aghili, H., Strong, H.R.
+and Dolev, D. Atomic broadcast:
+From simple message diffusion to
+Byzantine agreement. In Proceedings
+of the Fifteenth International Symposium
+on Fault-Tolerant Computing, (Ann
+Arbor, Michigan,June 1985), Institution of Electrical and Electronic Engineers, pp. 200-206. A revised version as IBM Tech. Rep. RJ5244.
+14. Cristian F. and Dancey, R. Faulttolerance in the advanced automation
+system. Tech. Rep. RJ7424, IBM Research Laboratory, San Jose, Calif.,
+Apr. 1990.
+15. Cheriton, D. and Zwaenepoel, W.
+The distributed V kernel and its performance for diskless workstations.
+In Proceedings of the Ninth A CM Symposium on Operating Systems Principles.
+(Bretton Woods, New Hampshire,
+Oct. 1983), ACM SIGOPS, pp. 129140.
+16. Dubois, M., Scheurich, C. and Briggs,
+F. Memory access buffering in multiprocessors. In Proceedings of the Thirteenth Annual International Symposium
+on Computer Architecture (June 1986),
+pp. 434-442.
+17. Johansen, D. Stormcast: Yet another
+exercise in distributed computing. In
+Distributed Open Systems in Perspective,
+Dag Johansen and Frances Brazier,
+Eds, IEEE, New York, 1993.
+18. Joseph T. and Birman, K. Low cost
+management of replicated data in
+fault-tolerant distributed systems.
+
+ACM Trans. Comput. Syst. 4, 1 (Feb.
+1989), 54-70.
+19. Kaashoek, M.F., Tanenbaum, A.S.,
+Flynn-Hummel, S. and Bal H.E. An
+efficient reliable broadcast protocol.
+Oper. Syst. Rev. 23, 4 (Oct. 1989), 5 19.
+20. Ladin, R., Liskov, B. and Shrira, L.
+Lazy replication: Exploring the semantics of distributed services. In
+Proceedings of the Tenth ACM Symposium on Principles of Distributed Computing (Quebec City, Quebec, Aug.
+1990), ACM SIGOPS-SIGACT, pp.
+43-58.
+21. Lamport, L. Time, clocks, and the
+ordering of events in a distributed
+system. Commun. ACM 21, 7 (July
+1978), 558-565.
+22. Liskov, B. and Ladin, R. Highly-available distributed services and faulttolerant distributed garbage collection. In Proceedings of the Fifth ACM
+Symposium on Principles of Distributed
+Computing (Calgary, Alberta, Aug.
+1986), ACM SIGOPS-SIGACT, pp.
+29-39.
+23. Makpangou, M. and Birman, K. Designing application software in wide
+area network settings. Tech. Rep. 901165, Department of Computer Science, Cornell University, 1990.
+24. Marzullo, K., Cooper, R., Wood, M.
+and Birman, K. Tools for distributed
+application management. IEEE Comput. (Aug. 1991).
+25. Peterson, L. Preserving context information in an ipc abstraction. In Sixth
+Symposium on Reliability in Distributed
+Software and Database Systems, IEEE
+(March 1987), pp. 22-31.
+26. Peterson, L.L., Bucholz, N.C. and
+Schlichting, R. Preserving and using
+context information in interprocess
+communication. ACM Trans. Comput.
+Syst. 7, 3 (Aug. 1989), 217-246.
+27. Reiter, M., Birman, K.P, and Gong,
+L. Integrating security in a group oriented distributed system. In Proceedings of the IEEE Symposium on Research
+in Security and Privacy (May 1992),
+pp. 18-32.
+28. Ricciardi, A. and Birman, K. Using
+process groups to implement failure
+detection in asynchronous environments. In Proceedings of the Eleventh
+ACM Symposium on Principles of Distributed Computing (Montreal, Quebec,
+Aug. 1991), ACM SIGOPS-SIGACT.
+29. Rozier, M., Abrossimov, V., Armand,
+M., Hermann, F., Kaiser, C.,
+Langlois, S., Leonard, P. and
+Neuhauser, W. The CHORUS distributed system. Comput. Syst. (Fall
+1988), pp. 299-328.
+CONTINUED ON PAGE 103
+
+COMMUNICATIOH|OPTHiACM December 1993/Vol.36, No.12
+
+S~
+
+CONTINUED
+
+FROM PAGE $3
+
+30. Schlichting, R.D. and Schneider, F.B.
+Fail-stop processors: A n approach to
+designing fault-tolerant computing
+systems. ACM Trans. Comput. Syst. 1, 3
+(Aug. 1983), 222-238.
+31. Schmuck, F. T h e use o f efficient
+broadcast primitives in asynchronous
+distributed systems. Ph.D. dissertation, Cornell University, 1988.
+32. Schneider, F.B. I m p l e m e n t i n g faulttolerant services using the state machine approach: A tutorial. ACM
+Comput. Surv. 22, 4 (Dec. 1990), 2 9 9 319.
+33. Siegel, A., Birman, K. and Marzullo,
+K. Deceit: A flexible distributed file
+system. Tech. Rep. 89-1042, Departm e n t o f C o m p u t e r Science, Cornell
+University, 1989.
+34. T a n e n b a u m , A. Computer Networks.
+Prentice-Hall, second ed,, 1988.
+35. Torrellas, J. and Hennessey, J. Estimating the p e r f o r m a n c e advantages
+o f relaxing consistency in a shared
+m e m o r y multiprocessor. Tech. rep.
+CSL-TN-90-365, C o m p u t e r Systems
+
+CONTINUED
+
+Laboratory,
+Stanford
+University,
+Feb. 1990.
+36. Turek, J. and Shasha, D. T h e many
+faces o f Consensus in distributed systems. IEEE Comput. 25, 6 (1992), 8 17.
+37. Wood, M. Constructing reliable reactive systems. Ph.D. dissertation, Cornell University, D e p a r t m e n t o f Comp u t e r Science, Dec. 1991.
+
+CR Categories and Subject Descriptors: C.2.1 [Computer-Communication
+Networks]: Network Architecture and
+
+Design--network
+
+communications; C.2.2
+
+[Computer-Communication Networks]:
+Network Protocols--protocol
+
+architecture;
+
+C.2.4 [Computer-Communication Networks]: Distributed Systems--distributed
+applications; D.4.4 [Operating Systems]:
+Communications management--message
+sending, network communications; D.4.5
+[Operating Systems]: Reliability--fault
+tolerance; D.4.7 [Operating Systems]:
+Organization and Design--distributed systems
+
+Additional Key Words and Phrases:
+Decision s u p p o r t systems, e x p e r t systems,
+integration frameworks, intelligent systems
+
+About the Authors:
+M. K. EL-NAJDAWI is an associate professor o f operations m a n a g e m e n t and
+m a n a g e m e n t information systems at Villanova University. His research interests
+are in the areas o f production scheduling,
+integration o f IS technologies, inventory
+m a n a g e m e n t , and applications o f ES and
+AI in decision making. Author's Present
+Address: T h e College o f C o m m e r c e and
+
+A N T H O N Y C. S T Y L I A N O U is an assistant professor o f m a n a g e m e n t information systems and director o f the Academy
+for Applied Research in Information Systems at the University o f N o r t h Carolina
+at Charlotte. His c u r r e n t research interests include the evaluation, integration,
+and implementation o f ES, knowledgebased DSS, and neural networks, the application o f T Q M in the information systems area, and issues related to strategic
+IS planning and change o f m a n a g e m e n t
+d u r i n g m e r g e r s and acquisitions. Au-
+
+Don't be
+left in the
+
+About the Author:
+KENNETH P. BIRMAN is an associate
+professor in the C o m p u t e r Science dep a r t m e n t at Cornell University and presid e n t and CEO o f ISIS Distributed Systems, Inc. C u r r e n t research interests
+include a range o f problems in distributed c o m p u t i n g and fault-tolerance, and
+he has developed a n u m b e r o f systems in
+this general area. Author's Present Address: Cornell University, D e p a r t m e n t o f
+C o m p u t e r Science, 4105A U p s o n Hall,
+Ithaca, NY 14853;
+emaii: ken@cs.cornell, edu
+Funding for the work presented in this article
+was provided under DARPA/NASA grant
+NAG-2-593, and by grants from IBM, HP, Siemens, GTE and Hitachi.
+Permission to copy without fee all or part of this
+material is granted provided that the copies are not
+made or distributed for direct commercialadvantage,
+the ACM copyright notice and the title of the publication and its date appear, and notice is give that
+copying is by permission of the Association for
+Computing Machinery. To copy otherwise, or to
+republish, requires a fee and/or specificpermission.
+© ACM 0002-0782/93/1200-036 $1.50
+
+G e n e r a l Terms: Algorithms, Reliability
+
+Finance, Villanova University, Villanova,
+PA 19085; email: elnajdaw@ucis.vill.edu
+
+FROM PAGE 65
+
+Additional Key Words and Phrases:
+Fault-tolerant process groups, message
+ordering, multicast communication
+
+thor's Present Address: T h e Belk College o f Business Administration, University o f N o r t h Carolina, Charlotte, NC
+28223; email: astylian@unccvm.uncc.edu
+For a complete list of references, contact the
+authors.
+Permission to copy without fee all or part of this
+material is granted provided that the copies are not
+made or distributed for direct commercial advantage,
+the ACM copyright notice and the title of the publication and its date appear, and notice is give that
+copying is by permission of the Association for
+Computing Machinery. To copy otherwise, or to
+republish, requires a fee and/or specific permission.
+© ACM 0002-0782/93/1200-054 $1.50
+
+Call for your FREE
+ACMpublications catalog:
+
+1-800-342-6626
+(In NY, or outside the US and
+Canada, call 1-212-626-0500)
+
+COMMUM|~AT|OMt O ~ T H I I ACM
+
+December1993/Vol.36,No.12 1 0 3
+
+

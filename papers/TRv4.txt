@@ -1,0 +1,651 @@
+Fast Distributed Slicing
+without Requiring Uniformity∗
+Vincent Gramoli†‡
+
+Ymir Vigfusson‡
+
+Anne-Marie Kermarrec§
+† INRIA
+
+Futurs
+Orsay, France
+
+vincent.gramoli@inria.fr
+
+1
+
+Ken Birman‡
+
+Robbert van Renesse‡
+
+‡ Cornell
+
+University
+Ithaca, NY
+
+{ymir,ken,rvr}@cornell.edu
+
+§ IRISA
+
+Rennes, France
+akermarr@irisa.fr
+
+Introduction
+
+Peer-to-peer (P2P) systems have become popular as a means of sharing resources efficiently within
+large sets of end-user platforms. Among their many applications are file sharing [4, 8], storage [10]
+and Voice-over-IP (VoIP) [12]. Ideally, such systems should be able to perform well even when
+the peers are heterogeneous with respect to performance-critical attributes such as bandwidth or
+storage capacity.
+Many recent studies have identified heavy-tailed distributions of storage space and bandwidth,
+and modal distributions of uptime [11, 13]. In systems that ignore such heterogeneity, two serious
+problems may arise. First, the unpredictable distribution of resources can adversely affect the
+service quality. VoIP applications, for instance, should avoid routing calls through nodes that
+are highly loaded or have low bandwidth. Second, when less capable peers are overloaded, the
+performance of the overall system can be affected. For example the fully decentralized P2P overlay
+Gnutella [4] suffered from congestion problems with increased system size, not only because of
+its inefficient structure for lookups, but also because the system made no distinction between
+bandwidth capabilities of nodes during a query flood. So severe was this problem that Gnutella
+was extensively revamped to create a two-level structure, promoting peers with longer lifetime
+and greater bandwidth capabilities to play a more active role, these peers are often referred to as
+so-called super-peers [8]. Other Kazaa-like applications [8, 12] have deployed similar distinction
+between users to improve the service quality.
+Identifying a set of nodes that have similar attributes or capabilities (for example bandwidth,
+processing power, storage, space or uptime) in a completely decentralized manner is thus an
+important challenge. Not only do systems tend to be large, but peers can arrive and depart
+∗ This
+
+work was supported, in part, by NSF, AFRL, AFOSR, INRIA/IRISA and Intel Corporation.
+
+1
+
+sporadically over time. This makes it important for systems to be able to track the distribution
+of important attribute values as they evolve over time. This report explores protocols whereby
+each node discovers its relative capability with respect to other nodes, and thereby learns which
+portion, or slice, of the network it belongs.
+In effect, the goal is to provide simple distributed techniques for partitioning the set of nodes
+in the system into subsets of similar capability, such that each subset contains a fixed fraction of
+the system nodes. This problem has been called the distributed slicing problem in prior work [2].
+Here, the goal is to provide a solution to the distributed slicing problem that uses little storage and
+bandwidth, that converges rapidly when the system is stable, to track changes over time, and that
+is rapidly responsive even if dramatic, sudden changes occur.
+We believe that a wide range of applications could benefit from a simple, robust, and distributed
+slicing protocol.
+• Instead of categorizing peers in a P2P as either superpeers or regular users, slicing offers a
+finer granularity of control. The attribute values correspond to the capacity that is important
+to the specific P2P network, for example: the number of shared files in a file sharing system;
+the free disk space in a distributed backup service or any function of uptime and bandwidth
+in a VoIP network.
+• One could improve load-balancing on e.g. heavily loaded web servers in a decentralized
+fashion by slicing load information and have servers that are relatively unloaded to the rest
+accept more requests.
+In [2], the authors present a solution to distributed slicing, called the Ranking protocol, that
+allows every node to determine its slice accurately provided that nodes can be sampled uniformly
+at random. Despite the inherent randomness of this gossip-based protocol, allowing a node to
+sample other nodes uniformly among the system is very difficult, especially when the system is
+dynamic. The lack of uniformity in the sample of nodes can dramatically affect the performance
+of the algorithm by decreasing the number of nodes that have already found their slice.
+This report introduces Sliver (for Slicing Very Rapidly), a simple protocol for solving the
+distributed slicing problem accurately, more rapidly than the Ranking protocol, and without assuming
+uniformity of node samples. The expected convergence properties of Sliver are proved analytically.
+We then evaluate this scheme by comparing it empirically to the Ranking protocol on a distributed
+testbed and by simulating it in a larger scale environment using real-life traces from P2P systems.
+Our results show that Sliver is faster than the Ranking protocol, does not require uniform node
+sampling to solve the distributed slicing problem, and copes with dynamism.
+
+1.1 Computational Model
+The system consists of n nodes with unique identifiers. Nodes can leave and join the system at any
+time, so that n may change over time. At any time, the nodes that are in the system are called active.
+Each node i has an attribute value xi ∈ R that represents its capacity in some metric, for example
+uplink bandwidth. At any time, the relative position ri of node i is the index of xi among the
+2
+
+attribute values divided by the total number of active nodes. Note that if two nodes have identical
+values, we break ties using the node identifiers. The sets P1 , . . . , Pk partition (0, 1] and are called
+j
+slices. Here, we focus on equally sized slices, that is, we set Pj = ( j−1
+k , k ] for any j, 0 < j ≤ k.
+A node i is said to belong to a slice Pj if ri ∈ Pj . Slicing a system is for all nodes i to determine
+the slice to which it belongs to. Nodes communicate by passing messages, so it is desirable for
+protocols to minimize the load imposed on the system.
+
+1.2 Problem Statement
+In the distributed slicing problem [2], every node wishes to determine its slice number without
+centralized coordination. We assume that k, the number of slices, is common knowledge, but not
+the number of nodes, n.
+We are interested in protocols that are (i) simple, (ii) accurate, in that node estimates converge
+rapidly to the actual slice numbers, and (iii) efficient with respect to the message load on the
+system, both in terms of the load experienced by participating nodes and the aggregated load on
+the network. A slicing protocol converges if it eventually provides a correct slicing of a static
+network.
+In a small system whose active nodes have values respectively 1, 2, 3, 7, 8, 9 and k = 3, the
+node with value 7 might only know about the values 1, 7, and 9. The node thus estimates that it
+must be in the middle of the three slices, which turns out to be the correct slice number in a slicing
+of all the active nodes.
+
+2
+
+Related Work
+
+Research efforts have been identifying the relative position of nodes in a distributed system. Unlike
+the classical k-medians [15] or k-quantiles [9] problems, the distributed slicing problem does not
+require that nodes learn the median values or the slices in which other nodes belong, but only that
+each node learns its own slice number.
+A recent paper [3] investigated the power of differentiating peers based on their attributes in
+the context of incentive file sharing applications. This work, based on stable matching theory, is
+called stratification and is of great interest for purposes of connectivity. The stratification defines
+some sets of similar nodes, one for each single node while the distributed slicing defines some sets
+of similar nodes, but those sets are identical for all nodes.
+In a first attempt to slice a network, Jelasity and Kermarrec [7] proposed a gossip-based
+probabilistic ordering algorithm. Initially, each node picks a uniform random value to serve
+as a position estimate usable to obtain a slice number. Nodes then continuously gossip about
+their estimate and actual attribute value, and if two nodes conclude that they are misplaced, they
+exchange their estimates. Although this solution can sort the network efficiently, it does not support
+variation in the distribution of values and is not able to slice the network if the initial random
+distribution is not uniform.
+The Ranking protocol [2] improves on the previous solution by allowing nodes to continuously
+3
+
+re-approximate their positions, instead of simply exchanging them. This approach solves the
+distributed slicing problem and tolerates the variation in the distribution of values. The Ranking
+protocol, however, requires each node to find other nodes (in order to communicate with them)
+uniformly among all other nodes. In a practical experiment, the unpredictable environment may
+introduce bias, thus defeating algorithms intended to perform uniform random gossip.
+
+3
+
+Slicing Algorithms
+
+3.1 The Existing Ranking Protocol
+Here, we present an overview of the Ranking protocol as specified in [2]. Periodically each node i
+picks a uniformly randomized set of neighbors. New nodes are picked by a background algorithm
+that can be shown (with simulations) to produce distributions close to uniform. Node i estimates
+its relative position by comparing the attribute values of the nodes it received from in a fixed time
+interval to its own attribute value. This estimate is set to the ratio of the number of lower attribute
+values that i has seen over the total number of values i has seen. Based on this estimate of its
+relative position, node i estimates its slice as the slice whose subinterval contains the estimate of
+its relative position.
+Observe that in the Ranking protocol node i does not keep track of the nodes from which
+it has received values, thus, two identical values sent from the same node j are treated by i as
+coming from two distinct nodes. The Ranking protocol converges eventually if the nodes are
+picked effectively uniformly at random.
+
+3.2 Sliver: Recording Recent Senders
+This section introduces Sliver, a simple distributed slicing protocol that works by memorizing
+recent information and use this information to refine its slice estimate. More precisely, Sliver
+temporarily retains the attribute values and the node identifiers that it encounters. Using this
+retained information, Sliver makes fast and precise estimates of the value distribution and of its
+correct slice.
+To address churn, we also retain the time at which we last interacted with each node, and
+gradually timeout node values that have not been encountered again within a prespecified time
+window. The timeout ensures that the amount of saved data is bounded, because the gossip
+mechanism we use has a bandwidth limit that effectively bounds the rate at which nodes are
+encountered. Moreover, this technique allows all nodes to cope with churn, whether or not the
+churn modifies the distribution of attribute values.
+The code running on each node in this scheme can be described as follows.
+• Gossip my attribute value to c random nodes in the system.
+• Keep track of the values I receive, along with the sender and the time they were received.
+Discard value records that have expired.
+4
+
+• Sort the m remaining values. Suppose B of them have a lower or equal attribute value than
+mine.
+• Estimate my slice number as the closest integer to kB/m.
+Sliver and the Ranking protocol differ mainly in that nodes in Sliver track the node identifiers
+of the values it receives, whereas nodes in the Ranking protocol only track the values themselves.
+More precisely, Sliver is a simple gossip-based protocol that uses randomness of communicating
+nodes to ensure propagation of the information all over the system, while it does not require
+uniformity in the choice of the communicating nodes.
+We do not make this consideration in the distributed experimentation. In the next section, we
+investigate the convergence properties of Sliver.
+
+4 Theoretical Analysis of Sliver
+Recall that Sliver stores recent attribute values and node identifiers it encounters in memory. At
+any point in time, each node can estimate its slice number using the current distribution of attribute
+values it has stored. We show analytically that relatively few rounds have to pass for this estimate to
+be representative for all nodes. More precisely, we derive an analytic upper bound on the expected
+number of rounds the algorithm needs to run until each node knows its correct slice number (within
+one) with high probability. We focus on a static system with n nodes and k slices, and we assume
+that there is no timeout, so that all values/identifiers encountered are recorded. The analysis can
+be extended to incorporate the timeouts we introduced to battle churn and to adapt to distribution
+changes, but may not offer as much intuition for the behavior and performance of the algorithm.
+For the sake of simplicity, we assume that each node receives the values of c other randomly
+selected nodes in the system during each round. Clearly, if a node collects all n attribute values
+it will know its exact slice number. A node i is stable if it knows its slice number within at most
+one. This ensures that nodes whose attribute values lie on the boundary of two partitions are able
+to converge without having to know most or all values in the system.
+Lemma 4.1. For all nodes to be stable with high probability (1 − ε), each node must collect at
+least
+s
+µ
+¶
+2n
+3
+4k2 ln 1 +
+.
+ln(1/(1 − ε))
+distinct attribute values.
+Proof: Fix some node i with value xi . We will say that node i receives a previously unknown
+attribute value in each time step. Let Bt denote the number of values that are known after t time
+steps which are below or equal to xi . The fraction Bn /n is the true fraction of nodes with lower
+or equal attribute values. Knowing this fraction is equivalent to knowing the exact slice number.
+There are on average n/k nodes per slice, so node i is stable as long as it reports a value within n/k
+of Bn /n. We will estimate the probability that at time t, Bt /t is within t/k of Bn /n.
+
+5
+
+One can visualize the process, which we coin the P-process, as follows. There are Bn balls
+marked red and n − Bn marked blue. In each time step t, a ball is randomly picked from the
+remaining ones and discarded. If it is red, Bt+1 = Bt + 1, otherwise Bt+1 = Bt . The probability
+P[blue ball at time t] =
+
+Bn − Bt
+n−t
+
+depends on the current distribution of ball colors. Let’s call it pt . To simplify the analysis, we will
+analyze the Q-process where a red ball is picked with probability qt = Bn /n in each time step. We
+see that if Bt /t ≤ Bn /n then
+pt =
+
+Bn − Bt
+Bn − tBn /n Bn
+≥
+=
+= qt ,
+n−t
+n−t
+n
+
+and similarly if Bt /t ≥ Bn /n then pt ≤ qt . Intuitively this means that the P-process tends to move
+towards Bn /n in each time step, whereas the Q-process ignores the proximity entirely.
+We see that under the Q-process, E[Bt ] = ∑ti=1 qt = tBn /n, since the steps are independent and
+identically distributed. Standard Chernoff-bounds now give
+·
+¸
+·
+µ
+¶
+¸
+t2
+nt
+P Bt > E[Bt ] +
+= P Bt > 1 +
+E[Bt ]
+k
+kBn
+µ
+¶
+E[Bt ](nt)2
+< exp −
+4(kBn )2
+µ
+¶
+tn
+= exp −
+4kBn
+µ
+¶
+t3
+≤ exp − 2
+4k
+since Bn ≤ n, and similarly
+·
+¸
+µ
+¶
+t2
+t3
+P Bt < E[Bt ] −
+< exp − 2 .
+k
+4k
+h
+i
+h
+i
+2
+2
+Let st = P Bt > E[Bt ] + tk and st0 = P Bt < E[Bt ] − tk . The probability that all nodes are stable
+at time t, i.e. Bt /t is within t/k from Bn /n, is at least
+µ
+¶¶2
+n
+n µ
+t3
+0
+∏(1 − st )(1 − st ) > ∏ 1 − exp − 4k2
+i=1
+i=1
+µ
+µ
+¶¶2n
+t3
+=
+1 − exp − 2
+.
+4k
+2n
+Set m = 1 − ln(1−ε)
+which is clearly O(n) for a fixed value of ε. Now let
+
+t≥
+
+√
+3
+4k2 ln m.
+6
+
+(1)
+
+Then
+µ
+
+¶¶2n
+µ
+µ
+¶
+t3
+1 2n
+1 − exp − 2
+≥
+1−
+4k
+m
+µ
+¶
+1 (m−1)(− ln(1−ε))
+=
+1−
+m
+≥ (1/e)− ln(1−ε)
+= 1−ε
+
+¡
+¢x−1
+by using the fact that 1 − 1x
+≥ 1/e for x ≥ 2.
+¤
+The following theorem bounds the expected number of rounds for the system to achieve stability.
+Theorem 4.2. Let ε > 0. After
+Ã
+!
+n
+n
+p
+ln
++ O(1)
+c
+n − 3 4k2 ln (1 − 2n/ ln(1 − ε))
+rounds in expectation, all n nodes will be stable with probability at least 1 − ε.
+Proof: Let’s assume for a moment that a node receives only one attribute value per round.
+The famous coupon collector problem asks that if each coupon has one of x distinct labels, how
+many coupons can we expect to collect before having all x different labels? The answer is roughly
+x ln(x). For our purposes, the coupons correspond to attribute values (n distinct labels) and we
+wish to know how many rounds it will take to collect t distinct ones. Let T j denote the number of
+rounds needed to have j distinct coupons if we start off with j − 1. Then T j is a geometric random
+variable, so E[T j ] = n/(n − j + 1). Thus the total time needed to collect t distinct coupons is
+µ
+¶
+n
+n
+= n(ln n − ln(n − t)) + O(1) = n ln
++ O(1).
+∑
+n−t
+j=1 n − j + 1
+t
+
+(The O(1) is at most the Euler-Mascheroni constant which is at most 0.6). By plugging in the
+lower bound (1) of t from the lemma and noticing that each node receives c attribute values per
+round, the result follows easily.
+¤
+The ln expression in the formula in the theorem is deceptive and should rather be thought of as
+a weight on n/c between 0 and 1 that depends on input parameters. The case where the number
+of slices k that drives equation (1) exceeds n is uninteresting, so to provide a more intuitive result
+for the case when k is at most linear (or slightly superlinear) in n we give the following result. An
+important special √
+case is that if k is at most a constant fraction of n, then the protocol is expected
+3
+to converge in O( k2 ln n/c) time.
+³p
+´
+Corollary 4.3. If k = O
+n3 / ln n , then all nodes in Sliver will be stable with high probability
+p
+after O( 3 k2 ln(n)/c) rounds in expectation.
+7
+
+´
+n3 / ln n , for a fixed ε > 0 there exists a constant α such that after
+p
+rearranging the equality we get 3 4k2 ln (1 − 2n/ ln(1 − ε)) ≤ αn for large n. Let t denote the
+expression on the left hand side. Using the theorem, we expect to reach stability with high
+n
+probability after nc ln n−t
++ O(1) rounds. Since 1 − x ≤ exp(−x) for x ≥ 0, we derive
+Proof: Since k = O
+
+³p
+
+1
+1
+1
+ln
+≤
+.
+x 1−x 1−x
+It follows that
+
+n
+=t
+n ln
+n−t
+
+µ
+
+1
+n
+log
+t
+1 − nt
+
+¶
+
+t
+≤
+≤
+1 − nt
+
+µ
+
+¶
+1
+t = O(t).
+1−α
+
+Dividing by c gives the result.
+¤
+For example, in a system with n = 100, 000 nodes and k = 1, 000 slices where each node gossips to
+c = 10 peers, our bound says that we expect the system to be stable with at least 99.9% confidence
+(ε = 0.001) within 43.2 rounds. In the next section we will run an experiment with k = 20 slices,
+and n = 3000 nodes that each gossip to c = 20 other nodes. According to our analysis, if all
+nodes are present and there is no churn then with at least 99.9% confidence we expect the system
+to become stable within only 3 rounds. These assumptions are rather strong, so to highlight the
+performance of the algorithm in practice, we use real-life churn in the experiment.
+
+5
+
+Experimental Analysis
+
+This section presents the experimental analysis of Sliver. First, Sliver and the Ranking protocols
+are compared using 10 machines in the Emulab [14] testbed. Emulab provides a distributed
+system while allowing developers to emulate the physical layer. For scalability purposes, Sliver is
+additionally simulated on thousands of nodes, using a realistic trace of churn.
+
+5.1 Distributed Experimentation
+The Sliver protocol is deployed on 10 machines on the Utah Emulab Cluster running RedHat Linux
+9. We implemented Sliver using GossiPeer [5], a framework that provides a low-level Java API
+for the design of gossip-based protocols. The underlying communication protocol is TCP and
+the average latency of communication has been chosen to match real latencies observed between
+machines distributed all over the world in PlanetLab. Additionally, we used storage information
+extracted from a real data set. The distribution of storage space used on all machines follows the
+distribution of 140 millions of files (representing 10.5 TB) on more than 4000 machines [1].
+This experiment aims especially at slicing the network according to the amount of storage space
+used. Slicing according to this value is of special interest for file sharing applications where the
+more files a node has, the more likely it will interest others. At the bootstrap process we provided
+each machine with the addresses of other machines. For the sake of getting random neighbors,
+all machines make use of random walks on the communication graph. More precisely, when a
+8
+
+Figure 1: Comparison of Sliver and the Ranking protocol using the Emulab testbed.
+1
+Ranking
+Sliver
+
+Position estimate
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0
+0
+
+100
+
+200
+300
+Time in seconds
+
+400
+
+500
+
+machine wants to request another it initiates a random walk. The machine at the end of the random
+walk sends a response, containing the requested information, back to the initiator of the random
+walk.
+Figure 1 compares the performance of Sliver and the Ranking protocol [2] in the settings
+mentioned above with a timeout of 10 minutes. The 20 curves represent the evolution of the
+relative position estimate over time on each of these 10 machines for both protocols. (Two curves
+representing the nodes with the lowest position 0 and the largest position 1 are hidden at the bottom
+and top edges of the figure.) Note that each node can easily estimate the slice it belongs to by using
+this position estimate, since it knows the total number of slices k.
+At the beginning of the experiment, all nodes have their relative position estimate set to 0, and
+time 0 represents the time the first message is received in the system. In the Sliver protocol, all
+nodes know their exact position, and thus their slice number, after 70 seconds, In contrast, observe
+that with the Ranking protocol, even if no nodes join or leave, the random walks may not sample
+enough nodes to get rapidly a precise relative position estimate. As a result, after 570 seconds,
+no nodes know their exact position with the Ranking protocol. Since Sliver keeps track of the
+identity of the sending nodes, it stabilizes as soon as the values are known. Consequently in a
+larger system, even if the number of slices is linear in the system size (e.g. k = n), each node
+would know to which slice it belongs.
+
+9
+
+Figure 2: Slice disorder measure of Sliver in a trace of 3000 Skype peers.
+
+1200
+
+Number of active nodes
+
+1000
+800
+600
+400
+200
+0
+
+Slice disorder
+0
+
+100000
+
+200000
+
+300000
+Time in seconds
+
+400000
+
+500000
+
+5.2 Churn in the Skype Network
+This section demonstrates the ability of Sliver to tolerate dynamism in a larger scale environment.
+We simulated the Sliver protocol on real-life traffic of the popular VoIP network Skype [12] that
+was assembled by Guha, Daswani, and Jain [6]. The trace tracks the availability of 3000 nodes in
+Skype between September 1, 2005 to January 14, 2006. Each of these nodes is assigned a random
+attribute value and we evaluate our slicing protocol under the churn experienced by the nodes in
+the trace.
+The goal of this experiment is to slice n = 3000 nodes into k = 20 slices. We assume that every
+node sends its attribute value to c = 20 nodes chosen uniformly at random every 10 seconds. Also,
+attribute values that have not been refreshed within 5000 seconds are discarded. The top curve in
+Figure 2 shows the number of nodes that are available at a given point in time. The bottom curve
+shows the slice disorder measure [2] of the system over time. This disorder is measured as the
+sum for any node of the distance between its real slice and the slice it thinks it belongs to. More
+precisely, the slice disorder at time t is ∑ |si − ei | where At is the set of active nodes at time t, si
+i∈At
+
+and ei are respectively the actual slice number and the estimated slice number of node i at time t.
+
+6
+
+Conclusion
+
+This report introduced Sliver, a new distributed slicing protocol. Sliver slices the network accurately,
+more rapidly than previous accurate solutions, and does not require random nodes to be picked
+uniformly. Additionally in Sliver, nodes send and receive a constant number of message in each
+step and each message has a constant size. Consequently, Sliver allows nodes to compute their
+relative capability in a large-scale and dynamic environment.
+More generally, this report addressed the distributed slicing problem. The problem arises
+in P2P systems where nodes try to adapt their roles to take advantage of heterogeneity. We
+believe distributed slicing can have an impact on various domains beyond file sharing and VoIP
+applications, for instance security. Indeed, the Sliver protocol has at its core an approximation
+of the distribution of values in a large-scale system. This information is of great interest for the
+10
+
+detection of abnormal values and may lead to practical identification of malfunctioning, or more
+importantly malicious behavior.
+
+References
+[1] J. R. Douceur and W. J. Bolosky. A large-scale study of file-system contents. In Proc. of
+the 1999 ACM SIGMETRICS Int’l conference on Measurement and modeling of computer
+systems, pages 59–70, 1999.
+[2] A. Fernández, V. Gramoli, E. Jiménez, A.-M. Kermarrec, and M. Raynal. Distributed slicing
+in dynamic systems. In Proc. of the 27th Int’l Conference on Distributed Computing Systems,
+2007.
+[3] A.-T. Gai, F. Mathieu, F. de Montgolfier, and J. Reynier. Stratification in P2P networks:
+Application to bittorrent. In Proc. of the 27th Int’l Conference on Distributed Computing
+Systems, page 30, 2007.
+[4] Gnutella homepage. http://www.gnutella.com.
+[5] GossiPeer. http://gossipeer.gforge.inria.fr.
+[6] S. Guha, N. Daswani, and R. Jain. An experimental study of the skype peer-to-peer voip
+system. In Proc. of the 5th Int’l Workshop on Peer-to-Peer Systems, 2006.
+[7] M. Jelasity and A.-M. Kermarrec. Ordered slicing of very large-scale overlay networks. In
+Proc. of the Sixth IEEE Conference on Peer-to-Peer Computing, 2006.
+[8] KaZaa homepage. http://www.kazaa.com.
+[9] D. Kempe, A. Dobra, and J. Gehrke. Gossip-based computation of aggregrate information. In
+Proc. of 44th Annual IEEE Symposium of Foundations of Computer Science, pages 482–491,
+2003.
+[10] A. Rowstrom and P. Druschel. Storage management and caching in PAST, a large-scale,
+persistent peer-to-peer storage utility. In Proc. of ACM SOSP, 2001.
+[11] S. Saroiu, P. K. Gummadi, and S. D. Gribble. A measurement study of peer-to-peer file
+sharing systems. In Proc. of Multimedia Computing and Networking, 2002.
+[12] Skype homepage. http://www.skype.com.
+[13] D. Stutzbach and R. Rejaie. Understanding churn in peer-to-peer networks. In Proceedings
+of the 6th ACM SIGCOM Conference on Internet Measurement, pages 189–202, 2006.
+
+11
+
+[14] B. White, J. Lepreau, L. Stoller, R. Ricci, S. Guruprasad, M. Newbold, M. Hibler, C. Barb,
+and A. Joglekar. An integrated experimental environment for distributed systems and
+networks. In OSDI02, pages 255–270, 2002.
+[15] N. E. Young. K-medians, facility location, and the Chernoff-Wald bound. In Proc. of the
+11th annual ACM-SIAM symposium on Discrete algorithms, pages 86–95, 2000.
+
+12
+
+

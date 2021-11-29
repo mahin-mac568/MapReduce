@@ -1,0 +1,2311 @@
+MFS: an Adaptive Distributed File System for Mobile Hosts
+Benjamin Atkin and Kenneth P. Birman
+Department of Computer Science
+Cornell University, Ithaca, NY
+batkin,ken @cs.cornell.edu
+
+
+Abstract
+
+MFS using file access traces from Windows NT and Unix, and a
+synthetic workload designed to emulate sharing patterns seen in
+Mobility is a critical feature of computer systems, and while collaborative engineering systems.
+wireless networks are common, most applications that run on
+Existing work in cache management for mobile file systems
+mobile hosts lack flexible mechanisms for data access in an en- [7, 13, 15, 18] incorporates mechanisms for making efficient
+vironment with large and frequent variations in network connec- use of available bandwidth. However, it has mostly focused on
+tivity. Such conditions arise, for example, in collaborative work adapting existing systems to cope with periods of low bandwidth,
+applications, particularly when wireless and wired users share in a style which we will refer to as modal adaptation. When
+files or databases. In this paper, we describe some techniques bandwidth is high, the application communicates normally; when
+for adapting data access to network variability in the context of bandwidth falls below a threshold, the application enters a lowMFS, a client cache manager for a distributed file system. We bandwidth mode in which communication is restricted or deshow how MFS is able to adapt to widely varying bandwidth ferred. More generally, an application has a small number of
+levels through the use of modeless adaptation, and evaluate the possible modes and chooses the appropriate one based on the
+benefit of mechanisms for improving file system performance currently available bandwidth. For example, in the Coda file
+and cache consistency using microbenchmarks and file system system [18], the cache manager operates in either a stronglytraces.
+connected, weakly-connected, or disconnected mode, which affects the policy for writing changes to files back to the server.
+Modal adaptation schemes are well-suited to environments
+1 Introduction
+in which changes in bandwidth are relatively predictable, such
+as switching network access from an Ethernet to a modem, but
+Mobility is now an major feature of computer systems: over the
+not as appropriate in for wireless networks, in which bandwidth
+past decade, laptops and hand-held devices capable of wireless
+availability is less predictable and varies over a larger possible
+network access have become common, and wireless networks are
+range. The notion of “insufficient bandwidth” can vary dependalso proliferating. Applications that run on hosts in wireless neting on how much data the application is trying to send, so that
+works must cope with constraints on access to data that are genit may make sense to adjust network usage when the bandwidth
+erally not present in wired networks. Distance from a base stadrops by half, rather than just when it falls to modem-like levels.
+tion, contention with other hosts or processes on the same host,
+Selecting a mode according to the available bandwidth can uninterference, and switching between different wireless media all
+necessarily constrain communication, since it ignores what data
+compound the variability in network performance to which apthe application actually wants to send over the network. Deferplications must adapt if they are to perform well.
+ring writing back all modifications to files may not be a sensible
+This paper focuses on adaptation techniques for management
+policy if those are the only messages available to send.
+of data accessed and modified by mobile hosts. We investigate
+We describe MFS (Mobile File System), a flexible cache
+adaptation in the context of MFS, a client cache manager for a
+manager for a distributed file system client, which differs from
+distributed file system. We concentrate on distributed file systraditional cache manager design in two important respects. First,
+tems because systems in this area are highly developed and have
+MFS uses an RPC library supporting priorities to enable modewell understood semantics, although the techniques we describe
+less adaptation [1], which allocates available bandwidth based
+should be broadly applicable in other application environments,
+on the types of messages being sent. By assigning priorities
+such as caching dynamic Internet content or caching to improve
+appropriately, foreground activities, such as retrieving files, can
+the performance of interactions with web services. We evaluate
+proceed concurrently with background activities such as writing
+The authors were supported in part by DARPA under AFRL grant RADC back changes, under the assurance that if bandwidth becomes
+F30602-99-1-0532, and by AFOSR under MURI grant F49620-02-1-0233, with
+scarce, the background activities, rather than the foreground ones,
+additional support from Microsoft Research and from the Intel Corporation.
+1
+
+Application programs
+
+background
+processing
+
+incoming
+traffic
+
+cache
+consistency
+
+demand fetch
+
+access
+monitoring
+
+prefetch
+
+outgoing
+traffic
+
+synchronous
+writeback
+
+update
+logging
+
+asynchronous
+writeback
+
+MFS server
+
+Adaptive RPC library
+
+MFS cache manager
+
+will be penalised first. Modeless adaptation using prioritised
+communication also allows MFS to be more flexible in response
+to bandwidth variations than would be possible with a modal
+scheme. Second, MFS incorporates a new cache consistency algorithm to efficiently provide a high degree of consistency for
+access to shared files, which is required for collaborative work
+applications.
+The rest of this paper is organised as follows: Section 2 describes the MFS design and differences from existing distributed
+and mobile file systems, as well as giving an overview of the
+MFS RPC library. Section 3 describes the use of prioritised communication in MFS and experiments to evaluate its effectiveness.
+Section 4 presents and explains experimental results for the MFS
+prefetching mechanism, and Section 5 does the same for the
+cache consistency algorithm. Finally, Section 6 concludes and
+describes future work.
+
+Figure 1: MFS architecture. The most important part of MFS is the
+cache manager, which intercepts file system operations from application
+programs and resolves them into accesses to its local MFS cache or
+RPCs to a server. The cache manager has a number of components:
+those in solid boxes are part of the core system, those in dashed boxes
+are optional extensions which are described in subsequent sections.
+
+2 MFS overview
+MFS differs from earlier mobile file systems in adjusting to changing network conditions using modeless adaptation. It comprises
+a core client-server file system, and a number of subsystems that
+perform different kinds of adaptation, and can be selectively enabled. Figure 1 shows the structure of the system. In this section
+we describe the core system, while subsequent sections do the
+same for the three main subsystems. We begin with an overview
+of mobile file system design and the relation of MFS to previous work, then briefly describe the adaptive RPC library used in
+MFS, and the current MFS implementation.
+
+2.1 MFS design and related work
+The core of MFS follows a design common to many mobile file
+systems [7, 13, 15, 18], which use techniques such as wholefile caching, and update logging combined with asynchronous
+writes, to cope with disconnections or intermittent connectivity.
+The design of MFS is closest in structure to that of Coda
+[18] and the Low-Bandwidth File System (LBFS) [13]. A host
+acting as a client of an MFS file system runs a user-level cache
+manager, which receives file system operations intercepted by a
+kernel module, interacting with the VFS layer of the local file
+system. We adopt the same approach to intercepting VFS operations as LBFS, making use of the kernel module provided as part
+of the Arla AFS client [21].
+The cache manager maintains a cache of recently-accessed
+MFS files on the local disk. When a VFS operation is intercepted for a file that is not in the cache, it is retrieved in full from
+the appropriate server, and the VFS operation is then resumed.
+MFS uses the writeback-on-close semantics first implemented in
+the Andrew File System [6]. When a dirty file is closed, the entire file contents are transferred to the server1 . The LBFS chunk
+1 Though
+
+scheme for minimising bandwidth utilisation when transferring
+files is not used in MFS, although it is orthogonal to MFS adaptation and could be added to further improve performance.
+The server that stores a file is responsible for maintaining the
+mutual consistency of the copies cached by clients. It records
+which clients cache the file, and is responsible for notifying them
+of changes. MFS implements a variation of the scheme used
+by Coda: when a file is retrieved from the server, the server issues a limited-duration “callback promise”, obliging it to inform
+the client through a callback if another host modifies the file. If
+the callback promise expires without a callback being issued, the
+client must revalidate the file before using it. The cache consistency algorithm is described in more detail in Section 5.
+
+2.2 Adaptive RPC library
+The fundamental difference between MFS and other file systems
+we have described is in the communication between the cache
+manager and servers. While LBFS uses a variant of the NFS
+RPC protocol [17], MFS, like Coda, uses a customised RPC.
+However, unlike Coda’s RPC, the RPC used in MFS incorporates novel features to allow it to adapt to network variability.
+The MFS RPC library is implemented on top of the Adaptive
+Transport Protocol (ATP). In discussing MFS RPC, we give an
+overview of the parts of ATP which are most relevant to MFS;
+ATP and its design motivations have been described in more detail in our earlier work [1].
+The hypothesis underlying ATP is that adapting to network
+variation by structuring applications according to modes is not
+always appropriate, and can sometimes lead to poor performance.
+Figure 2 shows the results of an experiment in which modeless
+adaptation over ATP achieves higher bandwidth utilisation than
+we will concentrate on a system with a single server.
+
+MFS is designed to support multiple MFS file servers, in this paper
+
+2
+
+Modal adaptation
+
+Modeless adaptation
+800
+
+true bandwidth
+bandwidth used
+
+700
+
+700
+
+600
+
+600
+
+bandwidth (KB/s)
+
+bandwidth (KB/s)
+
+800
+
+500
+400
+300
+200
+
+500
+400
+300
+200
+
+100
+0
+0
+
+true bandwidth
+bandwidth used
+
+100
+
+50
+
+100
+
+150
+
+200
+
+250
+
+0
+0
+
+300
+
+time (s)
+
+50
+
+100
+
+150
+
+200
+
+250
+
+300
+
+time (s)
+
+Figure 2: Modal versus modeless adaptation with ATP. The left graph shows performance with modal adaptation, and the right graph shows a
+scheme in which there are four classes of messages being sent simultaneously, of increasing priorities (the lowest line corresponds to the highest
+priority). Dark horizontal lines represent operating modes on the left, and the highest priority of data being sent during a second on the right. The
+modeless scheme achieves higher utilisation (48.5 MB of data sent) because it always has messages to send, while the modal scheme is dependent
+on a rapid and accurate estimate of the available bandwidth in order to select its correct operating mode (41.5 MB sent). These graphs are
+reproduced from [1].
+
+an equivalent modal scheme. Other experiments have shown
+that modeless adaptation can achieve improvements of 10-15%
+in bandwidth utilisation, and it is possible to construct cases in
+which the improvement is even greater. Work on adaptation
+in mobile file systems has generally relied on modal schemes
+[7, 18], but our evaluation of ATP demonstrated that it could also
+improve the performance of file system-like workloads. We discuss the implementation of modeless adaptation in MFS further
+in Section 3.
+ATP is implemented at user level, on top of kernel UDP. It
+has a message-oriented interface for communication, in which
+messages of an arbitrary size can be reliably transmitted with
+their boundaries preserved at the receiver’s side. An application
+can send a message synchronously or asynchronously. In the
+latter case the sender provides a function to be executed when
+transmission of the message completes, and the send operation
+itself is non-blocking; this is similar to the Queued RPC developed for Rover [8]. Unlike Queued RPC, ATP also allows the
+sender to attach a priority to each message, to control the order in which the queued messages are transmitted. Messages are
+queued at the sender according to their receivers, and each queue
+is ordered by priority. Messages of the same priority within a
+queue are transmitted in first-in, first-out order. ATP also allows
+a sender to specify a send timeout for a message, which causes
+the transmission to be suspended if it expires, so that the sender
+can react to it. An analogous mechanism is available for receive
+operations. Besides detecting when a remote host is inaccessible,
+send timeouts do not play a major role in MFS. An additional use
+for timeouts would be to detect prefetches which are not making
+progress and reissue a prefetch for a different file (see Section 4).
+ATP administers priorities by deriving an estimate for the
+bandwidth available between the sender and receiver. In order
+to minimise the transmission delay when a new message is sent,
+ATP uses a form of rate-based flow control. Each second is divided into twenty send periods of 50 milliseconds’ duration, and
+at most one-twentieth of the available bandwidth is used during
+
+a single send period. Without such a constraint, ATP would send
+as much data as it could on receipt of a low-priority message, and
+this data could then be buffered at an intermediate link, delaying
+the transmission of any high-priority message which might be
+sent later. The disadvantage of this scheme is that heavy contention at the sender may delay a new message by as much as
+50 milliseconds, regardless of its priority. This inefficiency of
+the ATP implementation is most visible when there is contention
+between different priorities at high bandwidth.
+
+2.3 MFS implementation
+The version of MFS described in this paper is implemented in
+C and runs on FreeBSD 4.5. Both the client and server have
+multiple threads to cope with simultaneous file system requests,
+and the RPC library has its own thread: therefore there are two
+mandatory thread context switches on any message send or receive operation. As we shall describe in subsequent sections,
+some subsystems have additional threads to carry out background
+processing. Unless noted otherwise, our experiments were conducted with a default client cache size of 256 MB.
+
+3 RPCs with priorities
+MFS RPCs are implemented on top of ATP in the natural way:
+an RPC request constitutes one message, and its reply another.
+Priorities are used to differentiate types of RPCs to improve performance: in general, small RPCs, or those which would cause
+an interactive client to block, are given high priority. RPCs for
+background activities, such as writing back files to the server, or
+prefetching files, are performed at low priority, so that they do
+not slow down high-priority RPCs. Table 1 shows the priority
+levels for different types of RPCs.
+Assigning priorities to RPCs allows MFS to adapt to bandwidth variation in a straightforward way. At high bandwidths, all
+RPCs complete quickly, with or without priorities. As bandwidth
+3
+
+priority level
+VALIDATE (high)
+FETCH
+STORE-ATTR
+STORE-FAST
+STORE-DATA
+PREFETCH (low)
+
+corresponding RPC types
+fetch attributes, callbacks
+fetch file data, directory contents
+write back directory and metadata updates
+write back shared files
+write back unshared files
+prefetch file data
+
+section
+3
+3
+3
+5
+3
+4
+
+independently and may compete. However, by making writes
+asynchronous, update logging pushes read-write contention “into
+the future”, to occur at the next log flush. The designers of
+Little Work incorporated a low-level priority mechanism at the
+IP packet level to further reduce interference between writeback
+traffic and other network traffic sent by the client [7].
+
+Table 1: Priority levels for MFS RPCs. Symbolic names are given for
+the priority levels, listed from highest to lowest priority. The third column gives the section in which the corresponding RPC types are described in detail.
+
+3.2 Asynchronous writeback
+Though it reduces bandwidth consumption, update logging is
+fundamentally unsuitable for use at high bandwidth, since it imposes a delay on transmitting updates to the server. Systems using update logging must therefore switch to a synchronous writes
+when bandwidth is high, with a threshold controlling switches
+between the two modes. The mode switch also changes the semantics of the file system, and the developers of Coda have noted
+that undetected mode changes can surprise the user in undesirable ways [18], such as cache inconsistencies arising due to unexpectedly delayed writes.
+Rather than relying on a modal adaptation scheme incorporating a transition to update logging when bandwidth is low, MFS
+uses a modeless asynchronous writeback mechanism, which is
+active at all bandwidth levels. Just as with update logging, when
+an application performs an operation that changes a file, such as
+a write or metadata update (create, delete, create directory and
+so on), it returns immediately. The update is then passed to the
+writeback subsystem, which sends it to the server when there is
+sufficient bandwidth: asynchronous writeback therefore only delays updates when there is foreground traffic. When bandwidth
+is high, the performance of asynchronous writeback should be
+comparable to purely synchronous writes, but when bandwidth is
+insufficient, asynchronous writes will improve the performance
+non-update RPCs.
+
+decreases, an implementation without priorities will result in the
+completion times for all RPCs increasing uniformly. When priorities are used, a backlog of low-priority RPCs will accumulate,
+while the time taken for high-priority RPCs to complete will increase more gradually. Our design is based on the assumption
+that when bandwidth is low, an assignment of differentiated priorities will improve the response times for interactive tasks. If a
+task which predominantly performs reads executes in parallel to
+a task which performs many writes, then with priorities, the first
+task will receive a higher share of the bandwidth.
+In practice, many applications have patterns of interactive
+file access involving both reads and writes. For instance, compiling source files involves interspersed reads and writes, but
+does not issue concurrent RPCs frequently. Such an application
+will have improved read performance when there is contention
+with other applications, but will correspondingly be penalised on
+writes. This does not match our design goal of having interactive,
+“mostly-read” applications obtain a larger share of bandwidth.
+We have implemented two solutions to this problem, based on
+making writes asynchronous: update logging, used in several
+existing systems and incorporated in MFS for the purposes of
+comparison, and asynchronous writeback, which is new to MFS.
+An alternative approach is to retain synchronous writes, but assign priorities according to some notion of relative importance
+of processes. Unfortunately, existing operating systems and applications generally do not provide this information, so we have
+not investigated it further.
+
+The cache manager’s writeback thread divides updates into metadata operations, such as directory modifications and file status
+changes, and file writes. The two types of operations are queued
+and replayed to the server separately, so that a metadata RPC
+can proceed in parallel with a file writeback. When an RPC from
+a particular queue completes, we say that the update has been
+committed at the server. The next update is then dequeued and
+3.1 Update logging
+an asynchronous RPC for it is initiated. Separating the small
+Update logging, which is implemented in some mobile file sys- metadata RPCs from file writes allows remote clients to see statems (notably Coda [18] and Little Work [7]), removes the re- tus changes to files without having to wait for intervening writequirement that processes wait for writes. Rather than sending an back traffic. A similar motivation underlies the cache consisupdate to the server as soon as a file is closed, the cache manager tency scheme for high read-write contention environments we
+logs the update and periodically flushes logged updates to the describe in Section 5.
+The chief complexity in implementing asynchronous writeserver. These systems enable logging when bandwidth is low, to
+improve read performance and reduce write traffic by aggregat- back lies in resolving dependencies between metadata operations
+ing updates to the same file in the log before they are transmitted. and updates to the same file. For instance, a file may be created,
+Update logging separates communication with the server into modified and closed, and the length of the metadata queue may
+two distinct streams: updates to files and directories, and all be enough to mean that the file update would be initiated first: in
+other traffic. These two types of communication are scheduled this case the file update must wait. Alternatively, a file may be
+
+4
+
+test
+
+activity
+
+GC
+
+grep
+compile
+grep
+write
+read
+compile
+read
+write
+
+GW
+RC
+RW
+
+synchronous
+uniform
+priorities
+2.9 (0.2)
+3.4 (0.4)
+63.6 (1.0) 63.0 (0.9)
+9.2 (0.5)
+8.9 (1.0)
+10.7 (0.5) 10.8 (0.6)
+19.2 (0.8) 19.5 (0.9)
+75.7 (1.4) 78.7 (2.3)
+34.7 (1.4) 21.3 (1.4)
+23.8 (1.2) 40.3 (1.5)
+
+logging
+uniform
+priorities
+3.2 (0.5)
+3.1 (0.4)
+54.4 (11.7) 48.1 (16.9)
+8.4 (0.2)
+8.5 (0.2)
+1.7 (0.5)
+1.6 (0.4)
+20.1 (0.8)
+20.1 (1.4)
+65.0 (12.5) 66.0 (11.8)
+35.0 (1.3)
+22.3 (1.3)
+3.4 (0.4)
+3.0 (0.1)
+
+asynchronous
+uniform
+priorities
+3.3 (0.5)
+3.1 (0.4)
+60.7 (0.8) 52.6 (11.4)
+8.5 (0.4)
+8.1 (0.1)
+1.7 (0.2)
+1.6 (0.2)
+20.3 (1.1)
+19.8 (0.7)
+71.9 (1.3)
+68.0 (1.2)
+35.4 (1.7)
+21.4 (1.3)
+3.7 (0.7)
+3.1 (0.2)
+
+Table 2: Performance of MFS priorities and writeback schemes. Each test consists of two concurrent processes executing different workloads.
+Mean times to completion are shown with standard deviations, over ten executions. Three different policies for writing back files are listed, under
+uniform or differentiated priorities (reads take precedence over writes). Values in bold are of particular significance. Note that elapsed times for
+write workloads give the time until the process running the workload finishes, not when the log is flushed (this is shown in Figure 3).
+
+modified and then deleted, which requires the file update RPC to
+be cancelled if it is still in transmission when the remove RPC is
+initiated. An update to a file will supersede any previous queued
+updates.
+
+Compile: compiles the entire MFS file system and its RPC library (259 files and directories comprising 1223 KB). None of
+the files are initially in the cache. This workload performs an intensive pattern of reads and writes files without raising the issue
+of concurrent accesses (a topic we tackle in Section 5).
+
+3.3 Performance evaluation
+
+Of these workloads, we classified Grep and Read as foreground
+workloads, and Compile and Write as background workloads.
+Four combined workloads were then generated by running a foreground and a background workload concurrently: we denote
+these as GC (Grep/Compile), GW (Grep/Write), RC (Read/Compile) and RW (Read/Write). Three types of RPCs predominate:
+cache validations, fetches of file data, and store operations for
+files, in descending order of priority. The aim of the experiments
+was to demonstrate that priorities improve the performance of
+the foreground workloads.
+The four combined workloads were executed on top of MFS
+configured with either synchronous writes, update logging or
+asynchronous writeback. The update logging mechanism was
+configured to delay flushing an update for at least a second. Every experiment was repeated ten times at each of five possible
+bandwidth values. Table 2 shows the time taken for each workload at a bandwidth of 1024 KB/s, and Figure 3 shows overall
+results for selected configurations.
+The results in Table 2 demonstrate the benefit of priorities
+when there is high contention between high-priority RPCs and
+writes. In both the I/O-bound GW and RW workloads, adding
+priorities decreases the time required for the foreground workload to execute, by up to 38% (see elapsed times for RW-read
+with synchronous writes in the table). This is particularly true
+in the RW test, where the foreground workload generates heavy
+contention by fetching a large volume of data. The greatest benefits are observable for the combination of asynchronous writes
+with priorities, since here the performance of the background
+workload can also improve by not having to wait for its writes
+to be committed at the server. In the GC and RC tests, where
+there is lighter contention, the impact of priorities is negligible,
+and in some cases results in a slight overhead, but this is chiefly
+
+After adding priorities to RPCs, it is natural to ask when they are
+beneficial, and to what degree. In addition to comparing MFS
+with and without prioritised RPCs, we also investigate the performance impact of replacing synchronous RPCs for file updates
+with asynchronous writeback. The performance of these alternatives is compared in a set of microbenchmarks, and with workloads gathered from Windows NT file system traces.
+Our experimental setup consists of two 1 GHz Pentium III
+desktop machines running the FreeBSD 4.5 operating system,
+one of which acts as an MFS server, and the other as an MFS
+client. The client machine makes use of the Dummynet trafficshaping module in FreeBSD to limit its incoming and outgoing
+bandwidth. The experiments we conduct in this section have a
+constant bandwidth over the duration of the experiment, but we
+analyse the performance of MFS when the bandwidth varies over
+the course of an experiment in Section 4.5.
+
+3.4 Microbenchmarks
+The first set of experiments compares different MFS configurations for specific types of contention. Four workloads were used:
+Grep: executes the grep utility several times on each of 256 8KB files. The files are present in the cache, but must be validated
+before they are used.
+Read: accesses 16 1-MB files in sequence, writing the contents
+of each file to /dev/null. The files are not initially present in
+the cache.
+Write: copies 16 1-MB files from the local file system into the
+MFS file system.
+
+5
+
+GC test (compile)
+
+25
+
+GW test (grep)
+
+8
+
+uniform
+priorities
+async
+
+7
+
+18
+16
+
+15
+
+10
+
+5
+4
+3
+
+uniform
+priorities
+async
+
+12
+10
+8
+6
+
+2
+1
+
+128
+
+256
+512
+bandwidth (KB/s)
+
+0
+64
+
+1024
+
+5
+
+2
+
+128
+
+256
+512
+bandwidth (KB/s)
+
+0
+64
+
+1024
+
+128
+
+256
+512
+bandwidth (KB/s)
+
+(a) GC test
+RW test (read)
+
+9
+
+uniform
+priorities
+async
+
+8
+
+0
+64
+
+1024
+
+128
+
+256
+512
+bandwidth (KB/s)
+
+1024
+
+(b) GW test
+RC test (compile)
+
+RC test (read)
+16
+14
+
+10
+
+4
+
+5
+
+0
+64
+
+15
+uniform
+priorities
+async
+
+14
+relative speedup
+
+relative speedup
+
+relative speedup
+
+6
+20
+
+GW test (write)
+
+20
+
+uniform
+priorities
+async
+
+relative speedup
+
+GC test (grep)
+30
+
+RW test (write)
+
+25
+
+uniform
+priorities
+async
+
+7
+
+20
+
+25
+uniform
+priorities
+async
+
+20
+
+uniform
+priorities
+async
+
+8
+6
+
+5
+4
+3
+
+4
+
+2
+
+2
+
+1
+
+0
+64
+
+128
+
+256
+512
+bandwidth (KB/s)
+
+1024
+
+0
+64
+
+relative speedup
+
+10
+
+6
+
+relative speedup
+
+relative speedup
+
+relative speedup
+
+12
+15
+
+10
+
+5
+
+128
+
+256
+512
+bandwidth (KB/s)
+
+0
+64
+
+1024
+
+15
+
+10
+
+5
+
+128
+
+256
+512
+bandwidth (KB/s)
+
+(c) RC test
+
+0
+64
+
+1024
+
+128
+
+256
+512
+bandwidth (KB/s)
+
+1024
+
+(d) RW test
+
+Figure 3: Performance of prioritised RPC with respect to bandwidth variation. Each pair of graphs in shows the speedup of one of three cache
+manager configurations, relative to the time taken by uniform priorities with synchronous RPCs at 64 KB/s. As well as uniform priorities and
+synchronous RPCs (“uniform”), the graphs also show curves for differentiated priorities and synchronous RPCs (“priorities”) and differentiated
+priorities and asynchronous RPCs (“async”). The values plotted for bandwidth of 1024 KB/s are the same as shown in Table 2.
+
+due to the overhead of priorities for small RPCs mentioned in
+Section 2.2.
+Comparing the execution time of the foreground workloads
+with synchronous writes, update logging and asynchronous writeback reveals that the latter two options generally perform comparably to or better than synchronous writes. Logging and asynchronous writeback greatly improve the performance of the background workloads, as has been noted previously [7, 18]. We focus on MFS with asynchronous writeback in the rest of this paper
+because it provides comparable performance to logged updates,
+allows straightforward modeless adaptation to bandwidth variation, and is easily extensible to more than one level of priority,
+which is required for our cache consistency algorithm.
+Since reducing available bandwidth increases the contention
+between RPCs of different types, the benefits of RPC priorities
+should be more apparent at lower priorities. Figure 3 shows the
+experiments of Table 2 extended to a wider range of bandwidth
+values. In these and later experiments, we evaluate MFS performance with bandwidths from 64 to 1024 KB/s: while 64 KB/s is
+not “low” in the sense of prior work, it is low enough to cause
+significant contention for the workloads we have considered, and
+we believe that our results will hold if available bandwidth and
+
+Grep
+
+Write
+
+14
+12
+
+15
+AFS
+MFS
+
+AFS
+MFS
+
+elapsed time (s)
+
+elapsed time (s)
+
+10
+8
+6
+
+10
+
+5
+
+4
+2
+0
+32
+
+64
+
+128
+256
+bandwidth (KB/s)
+
+512
+
+0
+32
+
+64
+
+128
+256
+bandwidth (KB/s)
+
+512
+
+Figure 4: Comparison of MFS and AFS performance. MFS with synchronous RPCs and priorities is compared to a version of the Andrew
+File System. Speedups for the two workloads of the GW test are shown,
+relative to the performance of AFS at 32 KB/s.
+
+traffic are scaled down further in parallel.
+The graphs in Figure 3 validate the incorporation of RPC priorities, since all the foreground workloads improve their performance substantially at lower bandwidths, relative to MFS with
+no priorities. Furthermore, the decrease in throughput for the
+
+6
+
+parameter
+
+trace
+mostly writes
+106
+15
+276
+16.51
+12.74
+19.92
+
+heavy load
+34
+41
+3312
+125.31
+27.82
+9.59
+
+Table 3: NTFS trace parameters. These traces are representative periods of mixed read and write activity. The durations are from the original
+NTFS traces. Note that the total file sizes represent the amount fetched
+by MFS during the trace. Where this is exceed by the write traffic, the
+additional traffic is due to new files being created or existing ones extended.
+
+ 
+ 
+ 
+ 
+  
+  
+  
+ 
+
+Time spent on RPCs (64 KB/s)
+
+3000
+
+2500
+
+2000
+
+1500
+
+1000
+
+500
+
+0
+
+3.5 NTFS workloads
+In addition to measuring the performance of MFS with synthetic
+workloads, we have also conducted experiments with traces gathered from the Windows NT file system (NTFS) [20]. Although
+MFS is implemented on a variant of Unix, and NTFS has a somewhat different interface to the file system, the traces were converted to run on top of MFS with little difficulty. The original
+traces recorded file accesses on a set of machines in a LAN. A
+majority of the accesses were local but some were to remote machines. We extracted subintervals from the traces which featured
+interesting file system behaviour and processed them to remove
+accesses to files over 4 MB in size. This preprocessing was necessary to eliminate the influence of extremely large NT system
+files, which made up 50% of the file system traffic in some portions of the original traces. Given that MFS retrieves and writes
+back whole files, including these system files would have distorted the experiments at low bandwidths.
+Table 3 gives statistics for the three traces: a trace in which
+reads predominate, a trace in which writes predominate, and one
+containing exceptionally heavy file system traffic. Each trace
+was run over MFS with the combinations of synchronous and
+asynchronous writes and differentiated and uniform priorities in
+previous experiments, and the results are given in Figure 5. To
+interpret these graphs, look for instance at the “heavy load” bar
+
+mostly reads
+101
+25
+2952
+46.61
+10.82
+3.44
+
+duration (s)
+applications
+unique files
+total file sizes (MB)
+read traffic (MB)
+write traffic (MB)
+
+time (s)
+
+Grep in the GW workload even is less than would be expected
+with reduced bandwidth: here uniform priorities result in throughput linear in the bandwidth, while differentiated priorities are less
+sensitive. The RC and GC tests show the benefit of asynchronous
+writeback, since the updates from the compile workload are committed sooner to the server than with synchronous writes, due
+to the overlap of “think time” with asynchronous writes. Finally, though uniform priorities provide better performance for
+the Write component of the RW test at 1024 KB/s (as is to be expected, since we are prioritising reads), this benefit largely vanishes at lower bandwidths.
+Though we have concentrated on determining the benefit of
+RPC priorities by a comparison of different configurations of
+MFS to one another, we have also performed a few experiments
+to compare the performance of MFS to a standard distributed
+file system. Figure 4 illustrates the result of running the GW
+test over MFS and an Andrew File System (AFS) setup; we
+used the Arla implementation of the AFS cache manager [21]
+and the OpenAFS server. AFS uses a UDP-based RPC library
+without priorities. The results largely correspond to those in Figure 3. MFS significantly outperforms AFS for the foreground
+Grep workload, since AFS effectively uses synchronous RPCs
+with uniform priorities. In the background Write workload, AFS
+slightly outperforms MFS, but it is both a more mature system,
+and more optimised than MFS for this sort of communication.
+Since the results of running the other tests are similar, we omit
+them for brevity.
+
+
+
+   
+   
+   
+    
+      
+       
+ 
+
+
+mostly reads
+mostly writes
+heavy load
+store overhead
+
+priorities uniform priorities uniform
+synchronous
+asynchronous
+
+Time spent on RPCs (512 KB/s)
+600
+
+500
+
+time (s)
+
+400
+
+300
+
+200
+
+100
+
+0
+
+10 10
+10 10
+10 10
+
+! !0101 1010
+!9 ( !01 )( 01
+!89< ( !10 )( 10
+!8=:;< ( !10 )( 10
+!= ( !10 )( 10
+! ( !10 () 10
+! !10 10
+
+23 44 454
+32 4 554 6 76
+32 4 54 6 76
+32 4 54 6 76
+#" 3232 %$4 54 '& /. '&66 /. 7676
++* #""# +* 3232 %$%$44 5454 '&&' ./ '&&'6 ./ 76
++* #" +* 32 %$4 -, 54 '& /. '&6 /. 76
++* #" +* 32 %$4 -, 54 '& /. '&6 /. 76
++* #" +* 32 %$4 -, 54 '& /. '&6 /. 76
+
+mostly reads
+mostly writes
+heavy load
+store overhead
+
+priorities uniform priorities uniform
+synchronous
+asynchronous
+
+Figure 5: Graphs of NTFS traces. Each trace ran with synchronous or
+asynchronous writes and uniform or differentiated priorities. The total
+height of each bar denotes the time from the first to last write, and the
+shaded portion denotes the time from the first to last read. The white
+portions denote the extra time required to complete all writes after the
+last read has finished.
+
+7
+
+for asynchronous writeback with priorities in the 64 KB/s graph.
+This shows that the total duration of the trace with this MFS configuration is 2409 seconds, but all the fetch traffic is completed
+within 2220 seconds of the start: this is a significant improvement over the alternative configurations measured. The remaining 189 seconds of the trace are taken up by asynchronously writing back file updates.
+In all cases the traces take significantly longer than they originally did in NTFS, where they were mostly accessing the local
+file system and therefore had no bandwidth constraints. The results largely repeat those seen in the microbenchmarks, to the
+extent that the greatest performance improvements are seen at
+low bandwidth when there is high read-write contention, such
+as in the mostly-writes trace where there is an 79% decrease in
+the time spent to read all the files. However, even at the higher
+bandwidth of 512 KB/s, there is a decrease of 30%. The mostlyreads trace is not much affected by changes in the configuration,
+although there is a slight decrease in both read and write times
+for prioritised asynchronous writeback. Unusually, at 512 KB/s
+the heavy-load trace performs best with uniform asynchronous
+writeback: we once again attribute this to inefficiency in the RPC
+protocol, since under extremely heavy load and high bandwidth
+it performs better when all messages have the same priority.
+
+the group. A file group is implemented as a special type of file
+within the MFS file system, with its own file identifier, but not
+attached to any specific directory. The file group a file belongs
+to, if any, is one of its attributes.
+The MFS prefetching subsystem derives much of its effectiveness from being combined with prioritised RPCs. While the
+prefetching algorithm in MFS is straightforward, it can still make
+bad decisions without a large overall performance penalty because the interference of prefetching with other file system activity is minimised. In the same way that some local file systems execute speculative operations to improve performance [3],
+MFS makes use of the “speculative communication” of prioritised RPCs in the hope of achieving a benefit through prefetching
+files.
+
+4.1 MFS prefetching implementation
+
+The MFS cache manager incorporates a small prefetching module, which can be optionally enabled at start-up. When it is initialised, a prefetching thread starts and initiates prefetch requests
+in parallel with the main activity of the cache manager.
+The core component of the cache manager alerts the prefetching module every time an application reads or writes a file, by
+calling the file access routine. This routine checks whether
+the file belongs to a file group – if not, the access is ignored. If
+4 Prefetching
+it is a member of a file group, the group is put at the head of
+the prefetch list. The prefetch thread periodically examines the
+Prefetching is commonly used to improve the performance of lo- group at the head of the list. If the group file for the group is
+cal file systems, as well as distributed file systems. However, not in the cache, it retrieves it from the server. Then it scans the
+in a file system with whole-file access, a mechanism is required files in the group in order until it finds the first one which is not
+to determine appropriate prefetching hints. Earlier work in file in the cache, or not validated, and issues a prefetch request or
+system prefetching has used clustering to derive file groups from validation request for it. If all the files are valid and are in the
+cache access statistics [11], predicted future file accesses from cache, the group is moved to the end of the prefetch list. Once
+recent accesses [5], or allowed applications to specify prefetch- the prefetch completes, the thread rechecks the head of the list
+ing hints explicitly [16, 19].
+to find the next file to prefetch: a new group may now be at the
+Inter-file dependencies can also be used as a source of hints. head of the list as a result of further application accesses to files.
+For instance, it may be known that a certain shared library is rePrefetch requests are similar to regular fetch requests for files,
+quired to run a text editor: in this case it would be advantageous with the exception that they are issued at the lowest level of prito retrieve the shared library from the server as well as retriev- ority: all other RPC traffic takes precedence over a prefetch RPC,
+ing the text editor executable. Alternatively, explicit informa- as shown in Table 1. Prefetches are synchronous, and only one
+tion such as the operating system’s database of installed software prefetch is made at a time. This is more a matter of implementapackages, or other application-specified dependency information tion convenience than a design decision: other work has shown
+can be used.
+the benefits initiating multiple concurrent prefetches from differAny of these techniques could be used to derive hints for use ent servers [19]. MFS does not currently make use of timeouts
+by the MFS prefetching subsystem; our evaluation uses hand- for prefetches, as we have noted earlier, but it could easily to exspecified dependency information, which is inaccurate in some tended to abandon a prefetching attempt that does not complete
+cases. Rather than reimplementing an existing hint-generation in a timely manner.
+mechanism, we focus on the performance of MFS with prefetchThe main complexity in implementing the prefetching subing, using a deliberately simple hint mechanism for the purposes system lies in handling a demand fetch (a compulsory fetch to
+of evaluation. Dependencies between files are conveyed using a service a cache miss) for a file which is already being prefetched.
+file group, which is a list of file identifiers for the related files. This conflict arises very frequently, particularly when an appliIt is assumed that after one file in the group has been accessed, cation performs a fast linear scan of files in a file group. An
+it becomes advantageous to prefetch the remainder of the files in efficient implementation of prefetching requires that the demand
+
+8
+
+Bad order
+12
+
+15
+relative speedup
+
+2.5
+2
+1.5
+1
+
+10
+
+5
+
+128
+256
+512
+bandwidth (KB/s)
+
+0
+64
+
+1024
+
+Multigrep
+
+128
+256
+512
+bandwidth (KB/s)
+
+8
+6
+4
+
+0
+64
+
+1024
+
+6
+4
+
+4
+
+10
+
+5
+
+0
+64
+
+0
+64
+
+1024
+
+Simultaneous writeback
+8
+
+prefetch
+no prefetch
+
+7
+
+10
+
+5
+
+128
+256
+512
+bandwidth (KB/s)
+
+9
+
+6
+5
+4
+3
+2
+
+2
+0
+64
+
+6
+
+0
+64
+
+1024
+
+15
+relative speedup
+
+8
+
+128
+256
+512
+bandwidth (KB/s)
+
+prefetch
+no prefetch
+
+15
+
+10
+
+8
+
+2
+
+20
+prefetch
+no prefetch
+
+prefetch
+no prefetch
+
+10
+
+Simulaneous demand fetch
+
+20
+prefetch
+no prefetch
+relative speedup
+
+relative speedup
+
+10
+
+Pause
+
+14
+12
+
+12
+
+2
+
+0.5
+0
+64
+
+14
+prefetch
+no prefetch
+
+relative speedup
+
+relative speedup
+
+3
+
+Read−write
+
+14
+prefetch
+no prefetch
+relative speedup
+
+3.5
+
+Good order
+
+20
+prefetch
+no prefetch
+
+relative speedup
+
+Bad groups
+4
+
+1
+128
+256
+512
+bandwidth (KB/s)
+
+1024
+
+128
+256
+512
+bandwidth (KB/s)
+
+1024
+
+128
+256
+512
+bandwidth (KB/s)
+
+1024
+
+0
+64
+
+128
+256
+512
+bandwidth (KB/s)
+
+1024
+
+Figure 6: Relative speedup of workloads with prefetching. These graphs show the speedup gained by adding prefetching for a range of bandwidth
+values, relative to the time taken with a bandwidth of 64 KB/s and no prefetching. Where a test comprises two separate processes, only the speedup
+for the foreground process is shown.
+
+fetch wait for the prefetch to complete, or that the prefetch be
+aborted. Issuing a fetch RPC at the same time as a prefetch is in
+progress needlessly wastes bandwidth, since it retrieves the same
+file from the server twice. The same could be true if we opt for
+aborting prefetches, since an aborted prefetch could be very close
+to completion. MFS therefore makes the demand fetch wait for
+the prefetch, but also raises the priority of the prefetch RPC to
+that of a regular fetch operation, to prevent a priority inversion.
+This requires an additional “raise-priority” RPC to the server,
+which results in more overhead than the case where a demand
+fetch occurs without a fetch-prefetch conflict. On the other hand,
+the fetch can frequently make use of the data already transferred
+and so still results in a faster response to the application.
+As we have explained, the implementation of the prefetching subsystem is not sophisticated. While it will reach an equilibrium if the total size of the file groups in the prefetch list is
+less than the cache size, there is no mechanism to prevent the
+prefetching subsystem “running ahead” of actual file accesses
+and evicting useful files from the cache, or evicting files which
+it has prefetched but have not yet been referenced by the user.
+Techniques for preventing this behaviour have been discussed
+elsewhere [19].
+
+sentative workloads. In order to characterise the effect of adding
+prefetching, we ran a set of eight microbenchmarks. The experimental setup was the same as in the priority tests, though this
+time MFS was configured to run with asynchronous writeback,
+and RPC with priorities, and only prefetching was either enabled
+or disabled. The tests were run at a range of bandwidth values,
+as in the previous section.
+Each microbenchmark consists of one or two processes accessing files, with some or all of the files forming file groups.
+The Read-Write test is the same as in Section 3, with a file group
+added for the Read data. The Compile MFS test has six file
+groups for the main directories of the system. Multigrep accesses
+2 MB of data in 75 text files, forming a single file group. Pause
+accesses 4 MB of small files, waits for 4 seconds, and accesses
+4 MB more; all the files are in a single file group. Simultaneous Demand-Fetch runs as two process. One process accesses
+64 files of 64 KB each, which form a file group. The other does
+the same, but without a file group. Simultaneous Writeback executes in the same way, but the second process writes the files to
+the server instead of reading them.
+The remaining tests investigate the overhead paid for weaknesses in the prefetching algorithm. Bad Groups uses 16 directories, each containing 64 128-KB files and forming its own file
+group; on its first iteration, the workload accesses the first file in
+each directory, on the second, the thirty-third, to provoke a large
+amount of useless prefetches. Good Order and Bad Order investigate the effect of the ordered list of files in a file group: Good
+
+4.2 Prefetching evaluation
+Having added prefetching to MFS, we evaluated whether such
+a straightforward algorithm can have a benefit for some repre9
+
+Order accesses the files in the group in the same order as the list;
+Bad Order accesses them in reverse order.
+
+p
+1
+2
+3
+
+4.3 Analysis of prefetching
+The graphs in Figure 6 show the results of the experiments. Where
+a test such as Simultaneous Demand-Fetch incorporates more
+than one workload, only the elapsed time for the foreground
+workload (the one accessing a file group) is given.
+In most of the microbenchmarks, adding prefetching from
+the file groups specified has a substantial improvement on the
+performance of the workload, varying with how amenable it is to
+prefetching. In general, more surplus bandwidth and more think
+time result in improved performance: this naturally means that
+the greatest improvements from prefetching are evident at higher
+bandwidths (six out of eight microbenchmarks run at least 10%
+faster when bandwidth is 1024 KB/s). In contrast, at low bandwidth most workloads see no benefit, since all the bandwidth is
+dedicated to higher-priority traffic.
+Only two tests perform worse with prefetching than without. The Read-write test performs slightly worse due to its already heavy network contention. The Bad Groups test, which exploits poor prefetching hints, consistently under-performs when
+prefetching is used. This effect is due to the useless prefetching RPCs flooding the outgoing link and imposing minor delays
+on each demand fetch: cumulatively these slow down the overall performance. An usual phenomenon is that the Bad Order
+test consistently outperforms Good Order, even though the latter
+triggers prefetches in the “correct” order. The explanation is that,
+by design, the Good Order test suffers from the fast linear scan
+phenomenon described in Section 4.1 (all prefetches in this test
+conflict with demand fetches). In contrast, at the start of the Bad
+Order test, the prefetching subsystem is able to prefetch some
+files accessed at the end of the test, without conflicting with a
+demand fetch. It can therefore achieve a greater speedup.
+
+fa(p)
+23
+51
+54
+
+fa(n)
+18
+41
+69
+
+fd(p)
+1
+0
+0
+
+RPC type
+fd(n)
+pf(p)
+7
+13
+15
+26
+42
+24
+
+df(p)
+0
+2
+24
+
+sd(p)
+7
+22
+35
+
+sd(n)
+9
+20
+35
+
+Table 4: Number of RPCs by type in bandwidth variability test. The
+entries under ’p’ denote periods in the test. Figure 7 gives the abbreviations for RPC types.
+
+are likely to be beneficial. The first would reduce the aggressiveness of prefetching (for instance, setting a byte threshold) from
+a file group if it appeared that a process was not using the files
+prefetched based on its prior accesses. This would reduce the
+overhead in the Bad Groups case. The second would explicitly
+detect a fast linear scan by a process, by counting the instances
+of prefetch and demand fetch conflict for a file group, and then
+disable prefetching from the group.
+
+4.5 Prefetching and bandwidth variability
+
+So far, our experimental results have demonstrated the benefits
+of MFS adaptation mechanisms at various levels of bandwidth
+availability, but not when the bandwidth is changing over the duration of the test. To conclude this section we will describe an
+example of MFS traffic under the execution of the Simultaneous
+Writeback test described in Section 4.2. This test involves two
+simultaneous workloads: one writes files 64 KB to the server and
+the other reads 64 KB files from the server, but is slightly modified from original version to use a longer “think time” of 0.25
+seconds when accessing each file (improving the potential for
+RPCs to overlap). We enabled asynchronous writeback and ran
+the test with the synthetic bandwidth trace shown in Figure 7(a),
+which changes the bandwidth once per second. This has three
+sections, a brief period when the bandwidth is at 512 KB/s, a
+gradual decrease to 128 KB/s over the course of ten seconds, and
+then the maintenance of the 128 KB/s rate until the end of the
+test.
+4.4 Summary of results
+The test was executed once with prefetching enabled, and
+Despite the simplicity of the MFS prefetching implementation, once with no prefetching, and the RPCs were then divided acwe have shown that workloads which are amenable to file-level cording to which period of the trace they terminated in. For each
+prefetching can achieve speedups of 70% at high bandwidth, and RPC, four quantities are calculated: the time spent queued for
+as much as 10% at bandwidths as low as 64 KB/s. Prefetching both the RPC request and reply, and the time taken for each to be
+carries a small performance overhead, even when performed at received, from the first to the last packet. This ignores the time
+the lowest priority, which can reduce its effectiveness for fast lin- spent at the server servicing the RPC, and the round-trip time
+ear scan workloads. It is possible to construct combination of file between the client and the server, but these quantities are small
+groups and a workload for which prefetching can significantly compared to the other costs. These values are added up for each
+degrade performance.
+of the RPCs within a particular period, and the results are shown
+Within the constraints imposed by our file group representa- in the Figures 7(b), 7(c), and 7(d).
+tion, the main conclusion we draw from the test cases exhibitThe graphs show how priorities affect RPCs and how prefetching a “prefetch penalty” is that the implementation could be im- ing changes MFS behaviour. In all three time periods, more time
+proved to incorporate a mechanism to inhibit prefetching. The is spent on RPCs to fetch file attributes with prefetching enabled
+current prefetching algorithm does not correlate file accesses with than without. Since the time to receive a fetch-attributes request
+the processes which make them, but if this were done, two changes or reply is negligible, the increased time is due to a greater queue10
+
+
+ 
+
+
+
+RPC times at intermediate bandwidth
+
+986798 986798 986798
+
+8
+
+total time(s)
+
+2
+
+384
+
+256
+
+
+
+
+
+
+
+ 
+
+
+
+  
+
+  
+   
+
+
+1.5
+
+1
+
+128
+
+0.5
+
+0
+
+0
+
+2
+
+4
+
+6
+
+8
+10
+time (s)
+
+(a)
+
+12
+
+14
+
+16
+
+UTRSUT UTRSUT UTRSUT
+
+9
+request queued
+request send
+reply queued
+reply send
+
+
+
+
+
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+ 
+
+7
+
+(((() (()
+(((()) (())
+(()) ())
+6
+
+total time(s)
+
+2.5
+
+512
+
+available bandwidth (KB/s)
+
+RPC times at high bandwidth
+
+3
+
+5
+4
+3
+2
+1
+0
+
+fa(p) fa(n) fd(p) fd(n) pf(p) df(p) sd(p) sd(n)
+RPC type
+
+(b)
+
+*+* *+*
+++*++*
++*+*+*+*
++* +*
+
+3232 3232 3232
+32%$32%$ 32%$
+%$%$%$%$ %$%$
+./../. %$%$%$%$ %$%$
+/./. %$ %$ %$
+// %$%$ %$
+,, -,, -,, ././# ././# %$%$ %$%$ %$%$
+-! -! "0" 01 01
+
+554 554
+4'&'&4'&'&
+'&'&'&'&
+'&'&'&'&
+'&'&'&'&
+&' &'
+'&'&'&'&
+'& '&
+
+fa(p) fa(n) fd(p) fd(n) pf(p) df(p) sd(p) sd(n)
+RPC type
+
+(c)
+
+35
+
+request queued
+request send
+reply queued
+reply send
+
+30
+25
+
+EDD EDD FEDD FG FG
+EEDEED FEED FG FG
+ED ED F:FED F:FG;G F:FG;G
+
+20
+15
+10
+
+5
+0
+
+BCQPCB CBQPCB CBQPCB
+NN ONN CBCBONN CBCB CBCB
+@@OA@@ CBCBOA@@ CBCB CBCB
+@@AA@@ CBCBAA@@ CBCB CBCB
+@AA@ CBCBAA@ CBCB CBCB
+@@A@@ CBA@@ CB CB
+AA
+K
+K
+J
+JK @A@ CBCBA@ CBCB CBCB
+KK
+J MLKJJ MLML CB CB CB
+KJ
+IH IH IH J
+=< ?>KJ=< ?>?> CBCB CBCB CBCB
+
+RPC times at low bandwidth
+
+40
+request queued
+request send
+reply queued
+reply send
+
+total time(s)
+
+Bandwidth trace
+640
+
+fa(p) fa(n) fd(p) fd(n) pf(p) df(p) sd(p) sd(n)
+RPC type
+
+(d)
+
+Figure 7: RPC traffic with varying bandwidth. Graphs (b), (c) and (d) show the time spent on RPCs during an execution of the Simultaneous
+Writeback test from Section 4.2, with the bandwidth varying according to the curve in (a). RPCs are labelled as follows: fa = fetch-attributes, fd =
+fetch-data, pf = prefetch, df = demand fetch to raise priority of a prefetch RPC, sd = store-data. The time spent on RPCs is shown with prefetching
+enabled, denoted by (p), and disabled, denoted by (n). Note that RPC interactions can overlap so the quantities for different RPC types are not
+additive. For some RPC types, the time spent on particular activities is negligible in proportion to the overall time: for instance, fetch-attribute
+requests are small and have a very low transmission time relative to their queueing delays.
+
+such users happen to be working on the same element of the design, it is clear that satisfying a request from stale data (whether
+in from the cache, or on a server that has yet to see a delayed
+writeback) would be visible to the user and costly2 .
+Strong cache consistency is certainly achievable in distributed
+file systems [22], but must be implemented with synchronous
+RPCs, and requires either readers or writers to incur a delay to
+ensure that only the latest version of a file is accessed. In contrast, as we have noted in Section 3, sending file updates to a
+server asynchronously has two potential benefits: the process
+modifying the file need not wait for the write to complete, and,
+if the update is delayed in the log for some interval before being written back, it may be superseded by a later update, and
+therefore can be omitted entirely. However, these benefits come
+at the cost of reduced cache consistency, since the version of
+the file stored at the server is inconsistent during the time that
+the update remains queued for transmission. Even though asynchronous writes in MFS are not delayed to aggregate updates,
+a burst of updates to a sequence of files may flood the link to
+the server and increase the delay before updates towards the end
+of the burst are committed. Any other client accessing the file
+5 Cache consistency
+will access the stale version, rather than one which incorporates
+the pending update. We therefore refer to this as a “hidden” upStudies of distributed file systems have largely concluded that file date, and the cache consistency problem caused by asynchronous
+sharing is infrequent in general-purpose environments [2, 10]. writes as the hidden update problem.
+However, we have identified a class of cache consistency scenarMobile file systems such as Coda [18] rely on optimistic conios as being of high importance and inadequately served by ex- currency control to resolve the conflicts generated by hidden upisting mobile file systems. Suppose that a complex engineering dates. An alternative approach is to use a variant of callbacks to
+design is maintained on a server and updated by teams of de- allow a client to replay writes asynchronously, but retain strong
+signers (architects, electrical contractors, engineers, and so on) cache consistency. For example, the Echo file system [12] forces
+while on-site supervisors work from those designs using mobile
+2 We thank Larry Felser and his team at Autodesk for their help in understanddevices. These supervisors read from the server and may also
+ing the file access patterns that arise in collaborative work applications for very
+change the design, for example to reflect one of the contingencies large architectural and engineering design firms [4].
+encountered and resolved only as construction proceeds. When
+ing delays; as we have seen earlier, high traffic can cause delays
+in the round-trip time for small RPCs. Conversely, store-data
+RPCs have a higher outgoing queueing delay in the absence of
+prefetching: this is due to the majority of the competing RPCs
+being high priority fetch-data RPCs. With prefetching, these
+RPCs are mostly replaced by prefetches, which operate at a lower
+priority than store-data RPCs, until any point where a concurrent
+demand fetch RPC raises their priorities to the fetch-data level.
+A comparison of fetch-data and prefetch RPCs reveals the effect of the bandwidth decrease. To begin with, the test run with
+prefetching performs a fetch-data RPC to get the first file, which
+triggers prefetching from its file group. Because of the large delay between file accesses, prefetches complete entirely without
+any overlapping demand fetches. Over the course of the second
+period of time, bandwidth becomes insufficient for a prefetch to
+complete during the 0.25 s delay between accesses, and raisepriority RPCs are triggered by the consequent cache misses. As
+the bandwidth decreases, the queueing delays increase as a proportion of the total time spent on prefetches.
+
+11
+
+the modifying client to flush its updates whenever another client
+accesses the file, and Fluid Replication [9] separates invalidating a file from transmitting its update. We have implemented a
+similar scheme in MFS, in which an access to a file which has an
+uncommitted update at a different client will force the writeback.
+The MFS consistency algorithm differs in its incorporation of file
+access information. Rather than enforce the same level of consistency for all files, MFS differentiates between “private” files,
+which have recently only been accessed by a single client, and
+“shared” files, which are accessed by multiple clients. Enforcing cache consistency between clients necessarily requires that
+shared files are kept highly consistent, but modifications to private files can be written back to the server less aggressively. The
+technique of using file access patterns to adjust a cache consistency protocol has been used in the Sprite distributed operation
+system [14], though in Sprite changes in caching policy were
+made when a file was opened simultaneously at different clients,
+while MFS uses longer-term access statistics.
+The remainder of this section describes our consistency algorithm in detail, and an evaluation of its effectiveness in reducing
+cache inconsistencies.
+
+host
+reader
+
+writer
+
+parameter
+delay between accessing modules
+operations per module
+delay between operations
+delay between accessing modules
+operations per module
+delay between operations
+size of external files
+
+value
+0.25-2 s
+4-10
+50-100 ms
+1-4 s
+4-20
+50-100 ms
+0-128 KB
+
+Table 5: Configuration parameters for the cache consistency evaluation.
+Individual instances are uniformally distributed within the listed ranges.
+
+ular store-data priority. If the file is shared and no other shared
+update is being sent, the thread begins transmitting the update at
+the store-fast priority. If another shared update is being written
+back, a synchronous “forward invalidation” RPC is made to the
+server at the highest priority, and then the update is queued for
+later high-priority transmission. Effectively, a forward invalidation is only made if the update cannot be transmitted immediately: in practice it can therefore be omitted at high bandwidth
+or when traffic is low. However, sending a forward invalidation
+RPC without requiring the modifying process to wait introduces
+5.1 The consistency maintenance algorithm
+a transient inconsistency.
+When the server receives a forward invalidation for a shared
+The MFS cache consistency algorithm is intended to achieve a
+file,
+or begins receiving an update for a file, it records the idenhigh degree of consistency, subject to the constraints imposed by
+tity
+of
+the writer, marks the file as dirty and issues callbacks to
+file semantics and the desirability of minimising overhead. We
+all
+the
+clients caching it. If one of these clients fetches the file
+have opted for a compromise which results in a small overhead
+before
+the update has been committed, the server sends highbut admits the possibility of a transient inconsistency.
+priority
+“server pull” RPCs to the clients with outstanding upThe algorithm requires information about client accesses in
+dates,
+which
+causes them to raise the priority of any store-data
+order to divide files according their status, either shared or unRPCs
+to
+expedite
+transmission. A fetch RPC for an unshared file
+shared. Since the file server always assumes that an unshared
+which
+is
+already
+cached
+by a different client always triggers a
+file has an uncommitted write when it is accessed by an addiserver
+pull,
+since
+the
+server
+has no way of knowing if the file has
+tional client, incorrect information about the status of a file only
+outstanding
+updates.
+affects the efficiency of the algorithm. Detection of such a misFinally, since updates to shared and unshared files are writclassification results in the file being marked as shared.
+ten
+back
+to the server at different priorities, the original order of
+The status of files can be specified by the user or by applithe
+sequence
+of updates is no longer entirely preserved. The upcations, or can be inferred by the file server according to how it
+dates
+to
+shared
+files form a subsequence of the original updates,
+is accessed. To be effective, automatic inference should incorpoas
+do
+the
+updates
+to unshared files. However, implicit dependenrate a heuristic for the sharing status of new files, and a mechacies
+between
+file
+updates
+are preserved, since the combination of
+nism for converting shared files to be unshared if they cease to
+forward
+invalidations
+and
+compulsory server pull RPCs for unbe accessed by more than a single client. The current implemenshared
+files
+prevents
+a
+client
+from accessing new versions of files
+tation in MFS assumes that every new file is unshared, and monin
+contravention
+of
+their
+update
+order.
+itors client accesses to a file according to an overlapping series
+of time periods to ensure that files which are regularly accessed
+remain shared. Since the MFS file monitoring component op- 5.2 Experimental setup
+erates on a larger time scale than the experiments considered in
+At the start of this section we identified large-scale collaborative
+this paper, we omit its details for brevity.
+engineering design as an example of a scenario which features
+When a process modifies a file, an update is scheduled to be
+a high degree of read-write sharing. At present we have evalappended to the log, and the process continues executing withuated the MFS cache consistency algorithm using a synthetic
+out having to wait for the server to be contacted. The writeback
+trace, though we are hoping to obtain real data from such an
+thread then checks the status of the file the update modifies: if the
+environment in the future.
+file is unshared, the update is queued for transmission at the reg-
+
+12
+
+0.8
+0.6
+0.4
+0.2
+0
+
+64
+
+128
+256
+512
+bandwidth (KB/s)
+
+
+ 
+
+
+1024
+
+(a)
+
+1
+
+0.5
+
+0
+
+64
+
+128
+256
+512
+bandwidth (KB/s)
+
+200
+
+number of RPCs
+
+average time (s)
+
+1
+
+!"#
+
+
+$
+
+
+
+
+
+
+   
+    
+
+        
+
+
+     
+
+    
+
+
+    
+     
+   
+
+hikj ihkj
+ml ml
+cbcb cbcb ed fgf
+cbcb YX cbcb [Z eded ffgfgf
+cbb ON YXYX cbb [Z[Z eded ff]\\] gfgf
+ccb ON YX ccb QP [Z ed f]\ gf
+cbbc ONON YXXY cbbc QPQP [Z[Z eded RffSRS ]\]\ gfgf
+cb ONON YX cb QP [Z[Z ed RfR ]\ gf
+
+Invalidations and server pulls
+
+MFS/CC
+async+unif
+sync+diff
+none+diff
+synchronous
+
+average time (s)
+
+1.2
+
+DEFGH
+10(10(%&&% 1010
+I
+&0(1 %&% 01
+1(010(%& 1010
+10(1(0 &%&% 1010
+10(10(&%&% 1010 )(')(' )')'
+B
+1(010(:(:(&%&% 1010 ;:;: )(')(' 3(23(2 <()')' 3232 =<= +(*+(* >(+*+* 545 ?>? -(, @(-, 67 @A 8(./ 89 BCC
+:(&% ;: )(' 3(2 <()' 32 < +(* >(+* 4 >
+
+Average duration of reader fetch
+1.5
+
+MFS/CC
+async+unif
+sync+diff
+none+diff
+synchronous
+
+150
+
+100
+
+50
+
+0
+
+1024
+
+(b)
+
+^^_^^
+^^__^^ ML ``ML a`a`
+^KJ UT __^ MLML ``MLML WVWV a`a`
+^^KJ UTT _^^ ML `ML WV a`
+^^KJKJ UUTT __^^ MLML ``MLML WVWV a``a
+^KJKJ UUT __^ ML ``ML WV a`a`
+64
+
+128
+256
+512
+bandwidth (KB/s)
+
+(c)
+
+1024
+
+   
+   
+ on   
+onon yxyx  pp qpqp {z 
+ onon yxyx  pp qppq {z{z 
+on yx  p qp {z 
+onon yxxy  ppqpqp {z{z 
+on yx  p qp {z{z 
+
+
+
+
+Time spent on invalidations
+9
+
+MFS/CC
+async+unif
+sync+diff
+server pulls
+
+8
+7
+6
+total time (s)
+
+Average store RPC duration
+1.4
+
+5
+4
+3
+2
+1
+0
+
+64
+
+
+
+
+sr }|}| 
+srrs |}}| 
+sr }| 
+srsr }|}| 
+ sr }| 
+
+
+
+MFS/CC
+async+unif
+sync+diff
+
+ 
+ ~  
+
+ 
+ ~  
+
+  
+
+
+
+ ut ~~  
+ut ~  
+ 
+ 
+
+
+
+
+v
+v
+
+w
+w
+ut  v 
+ wv  
+
+ 
+
+ 
+
+ ut ~  w
+
+
+128
+256
+512
+bandwidth (KB/s)
+
+1024
+
+(d)
+
+Figure 8: Graphs for cache consistency trace. These graphs show various features of the performance results; in the legends, “async” denotes
+asynchronous invalidations; “sync” synchronous invalidations, and “none” no invalidations; “diff” denotes differentiated writeback priorities
+for shared and unshared files, and “unif” denotes uniform priorities. “MFS/CC” is the MFS cache consistency algorithm. In graph (c), the height
+of a bar counts the number of invalidations; the white portion counts the number of server-pull RPCs.
+
+Our experimental setup consisting of three hosts: one server,
+a “reader” client, and a “writer” client. The bandwidth from the
+reader to the server was fixed at 1024 KB/s, and the bandwidth
+from the writer to the server was varied according to the experiment. The writer was configured in one of seven different ways:
+with synchronous writes; or with asynchronous, synchronous or
+no invalidations, and differentiated or uniform priorities for writing back shared and unshared files. The MFS concurrency control algorithm (MFS/CC) corresponds to asynchronous invalidations with differentiated priority for shared files. Both clients
+access a shared repository of files stored on the file server, which
+consists of 40 modules. Each module has a descriptor file and a
+set of 4-12 member files. Module descriptor files are about 1 KB
+in size and the 334 member files take up an average of 64 KB.
+The total size of all the files in the collection is 21 MB.
+The writer workload consists of the writer updating modules
+in a random order. An update to a module consists of a sequence
+of operations, 20% of which are reads and 40% are writes to a
+file in the module; the remaining 40% consist of writes to unshared “external” files, which are each created with a unique
+name. There is a pause between each operation and a longer
+pause between updates to modules. The reader workload is similar, but an access to a module consists of a series of reads, and
+external files are never accessed. The configuration parameters
+used to generate the reader and writer workload are listed in Table 5. The writer workload has a nominal duration of two minutes, while the reader workload is extended to terminate at the
+same time as the writer workload actually finishes (since low
+bandwidth could extend its running time beyond two minutes).
+
+5.3 Analysis of the results
+Figure 8 shows graphs of some selected results from the experiments. In general, while synchronous writes provide strong concurrency control, they resulted in the lowest rate of completed
+writes in all the tests, since the writer had no possibility of over13
+
+lapping think time with asynchronous writeback. At all bandwidth levels the MFS/CC algorithm outperformed synchronous
+writes by at least 20%, and was among the options with the highest write throughput. This is clear from graph (a), which shows
+the average time to complete store RPCs initiated by the writer
+(excluding invalidations). Here MFS/CC outperforms all of the
+alternatives. This is because of the reduced number of invalidations it generates, and also since, in contrast to most of the other
+schemes, it is able to take advantage of both differentiated writeback, and of server-pull RPCs to raise the priority of its writes.
+Graph (b) shows the performance from the reader’s perspective. While the writer is able to decrease its time spent performing store RPCs, the reader’s average time spent on fetches increases sharply when the file in question must be pulled from
+the writer. Naturally, this cost must be weighed against the benefit of substantially increased writer throughput. Differentiated
+writeback succeeds in reducing the time the reader has to wait
+when accessing a shared file.
+Graphs (c) and (d) show statistics for invalidations and serverpull RPCs for those writer configurations which make use of
+them. MFS/CC significantly reduces the number of invalidations
+it must transmit by putting off invalidating a file until it is added
+to the log, yet the effect of this policy on the number of serverpull RPCs is minor. The “async+unif” policy, which differs from
+MFS/CC in omitting differentiated writeback, makes more invalidations and incurs more server-pull RPCs, because its store
+RPCs must compete with the RPCs to write back external files.
+This increases the commit delay for each file and the likelihood
+of it being accessed by the reader while it is being written back.
+In conclusion, these experiments demonstrate that for the trace
+we have examined, the MFS algorithm of asynchronous invalidations and differentiated writeback is able to maintain cache
+consistency between the two clients and to allow the writer to
+write back changes to the stored data faster than is possible with
+the alternative schemes. We intend to further evaluate the perfor-
+
+References
+
+mance of the algorithm to determine its effectiveness under other
+workloads, and with more clients.
+
+[1] B. Atkin and K. P. Birman. Evaluation of an adaptive transport protocol. In Proceedings of the 22nd Annual Joint
+Conference of the IEEE Computer and Communications
+Societies (Infocom 2003), San Francisco, California, Apr.
+2003.
+
+6 Conclusion
+
+The growing use of mobile computers and wireless networks
+has greatly increased the scope for adapting data access to vary[2] M. G. Baker, J. H. Hartman, M. D. Kupfer, K. W. Shirriff,
+ing network characteristics. This paper has explored applying
+and J. K. Ousterhout. Measurements of a distributed file
+the technique of modeless adaptation to a distributed file system
+system. In Proceedings of the 13th ACM Symposium
+to improve its performance. The cache manager for our MFS
+on Operating Systems Principles, pages 198–212, Pacific
+file system incorporates features that are not present in existing
+Grove, California, Oct. 1991.
+file systems for mobile hosts: adaptation to bandwidth variation
+through the use of prioritised communication, and an efficient
+[3] F. W. Chang and G. A. Gibson. Automatic I/O hint genercache consistency protocol using file access information to imation through speculative execution. In Operating Systems
+prove performance.
+Design and Implementation, pages 1–14, 1999.
+We have evaluated the effect of these features on performance
+at varying bandwidth levels and under both synthetic and real
+[4] L. Felser. Personal communication, Sept. 2003.
+workloads, including a workload emulating collaborative data
+[5] J. Griffioen and R. Appleton. Performance measurements
+access with high read-write contention, and found that while the
+of automatic prefetching. In Proceedings of the ISCA Interadditional costs imposed are mostly hidden, they can have benenational Conference on Parallel and Distributed Computfits which are very visible. Additionally, the non-modal nature of
+ing Systems, Sept. 1995.
+adaptation in MFS allows clients to adapt quickly to a variety of
+bandwidth conditions without substantial changes in operation.
+[6] J. H. Howard, M. L. Kazar, S. G. Menees, D. A. Nichols,
+Our evaluation has included comparisons of MFS to cache manM. Satyanarayanan, R. N. Sidebotham, and M. J. West.
+ager configurations corresponding to prior work, and confirmed
+Scale and performance in a distributed file system. ACM
+that there are situations in which MFS would outperform AFS,
+Transactions on Computer Systems, 6(1):51–81, Feb. 1988.
+Coda and Little Work. However, these earlier systems were designed for a mobile environment which is substantially different [7] L. B. Huston and P. Honeyman. Partially connected operafrom that available today. Essentially, MFS is able to provide
+tion. Computing Systems, 8(4):365–379, 1995.
+improved performance in periods of high network contention by
+[8] A. D. Joseph, J. A. Tauber, and M. F. Kaashoek. Mofavouring cache validation and RPCs to retrieve files over other
+bile computing with the Rover Toolkit. IEEE Transactypes of traffic. We have not compared MFS with LBFS since
+tions on Computers: Special issue on Mobile Computing,
+their approaches are orthogonal, and LBFS-style algorithms are
+46(3):337–352, Mar. 1997.
+not present in the earlier systems we have compared against. We
+anticipate that implementing LBFS file chunks in MFS would
+[9] M. Kim, L. P. Cox, and B. D. Noble. Safety, visibility,
+further improve performance its performance.
+and performance in a wide-area file system. In ProceedIn future work, we plan to investigate the performance of
+ings of the First USENIX Conference on File and Storage
+modeless adaptation and MFS in wide-area and more web-like
+Technologies, Monterey, California, Jan. 2002.
+environments, as well as further evaluating the performance of
+the MFS cache consistency algorithm. We also intend to use [10] J. J. Kistler and M. Satyanarayanan. Disconnected operaMFS to further examine the benefits achievable from the autotion in the Coda file system. ACM Transactions on Commatic generation of caching policies for files.
+puter Systems, 10(1):3–25, 1992.
+[11] G. H. Kuenning and G. J. Popek. Automated hoarding for
+mobile computers. In Proceedings of the Sixteenth ACM
+Symposium on Operating Systems Principles, pages 264–
+275, Saint Malo, France, Oct. 1997.
+
+Acknowledgements
+We would like to thank Robbert van Renesse, Werner Vogels,
+Emin Gün Sirer and Paul Francis for comments and suggestions
+regarding MFS. We also thank Rimon Barr, Indranil Gupta, and
+Kevin Walsh for helpful discussions and corrections to this paper.
+
+[12] T. Mann, A. Birrell, A. Hisgen, C. Jerian, and G. Swart. A
+coherent distributed file cache with directory write-behind.
+ACM Transactions on Computer Systems, 12(2):123–164,
+1994.
+
+14
+
+[13] A. Muthitacharoen, B. Chen, and D. Mazières. A lowbandwidth network file system. In Proceedings of the Seventeenth ACM Symposium on Operating Systems Principles, Lake Louise, Alberta, Oct. 2001.
+[14] M. N. Nelson, B. B. Welch, and J. K. Ousterhout. Caching
+in the Sprite network file system. ACM Transactions on
+Computer Systems, 6(1):134–154, Feb. 1988.
+[15] T. W. Page, R. G. Guy, J. S. Heidemann, D. Ratner, P. Reiher, A. Goel, G. H. Kuenning, and G. J. Popek. Perspectives
+on optimistically replicated peer-to-peer filing. Software –
+Practice and Experience, 28(2):155–180, Feb. 1998.
+[16] R. H. Patterson, G. A. Gibson, E. Ginting, D. Stodolsky,
+and J. Zelenka. Informed prefetching and caching. In Proceedings of the Fifteenth ACM Symposium on Operating
+Systems Principles, pages 224–244, Copper Mountain Resort, Colorado, Dec. 1995.
+[17] R. Sandber, D. Goldberg, S. Kleiman, D. Walsh, and
+B. Lyon. Design and implementation of the Sun network
+file system. In Proceedings of USENIX Summer Conference, 1985.
+[18] M. Satyanarayanan. The evolution of Coda. ACM Transactions on Computer Systems, 20(2):85–124, May 2002.
+[19] D. A. Steere. Exploiting the non-determinism and asynchrony of set iterators to reduce aggregrate file I/O latency.
+In Proceedings of the Sixteenth ACM Symposium on Operating System Principles, pages 252–263, St. Malo, France,
+Oct. 1997.
+[20] W. Vogels. File system usage in Windows NT 4.0. In Proceedings of the Seventeenth ACM Symposium on Operating
+Systems Principles, pages 93–109, Kiawah Island, South
+Carolina, Dec. 1999.
+[21] A. Westerlund and J. Danielsson. Arla – a free AFS client.
+In Proceedings of the 1998 USENIX Conference, Freenix
+Track, New Orleans, Louisiana, June 1998.
+[22] J. Yin, L. Alvisi, M. Dahlin, and C. Lin. Volume leases
+for consistency in large-scale systems. IEEE Transactions
+on Knowledge and Data Engineering, 11(2):563–576, July
+1999.
+
+15
+
+

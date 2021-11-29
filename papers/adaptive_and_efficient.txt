@@ -1,0 +1,1686 @@
+Adaptive and Efficient Epidemic-style Protocols for Reliable and
+Scalable Multicast
+Indranil Gupta
+
+Anne-Marie Kermarrec, Ayalvadi J. Ganesh
+
+Dept. of Computer Science
+
+Microsoft Research
+
+Cornell University, Ithaca, NY USA 14853
+
+7 J J Thomson Ave., Cambridge, UK CB3 0FB
+
+gupta@cs.cornell.edu
+
+{annemk,ajg}@microsoft.com
+Abstract
+
+Epidemic-style (gossip-based) techniques have recently emerged as a scalable class of protocols for reliable
+multicast dissemination in large process groups. These protocols are applicable in designing a wide variety
+of distributed computing systems by providing probabilistic guarantees on reliability and scalability. However,
+existing implementations of epidemic-style dissemination are reputed to suffer from two major drawbacks: a)
+(Lack of Adaptivity) they impose the same load on process group members and the network regardless of the
+failure characteristics of the underlying network, and b) (Network Overhead) when deployed on a WAN-wide or
+VPN-wide scale they impose a high load on network elements, such as core routers. In this paper, we present
+the first comprehensive set of solutions to these problems. The concrete contributions of this paper are a) an
+Adaptive multicast Dissemination Framework that can be used with any gossiping primitive, and b) a Hierarchical
+Gossiping algorithm. These algorithms use an abstract hierarchy defined on the process group, called the Leaf
+Box Hierarchy - this hierarchy can be mapped on to any Internetwork-type topology to guarantee low overhead
+on network elements such as core routers. These algorithms require processes to maintain a partial membership
+with a size that grows only poly-logarithmically with the group size. Simulation results are presented to evaluate
+the characteristics and benefits of the Adaptive Dissemination Framework and the Hierarchical Gossiping.
+
+Keywords: Multicast, Probabilistic Reliability, Scalability, Epidemic protocols, Adaptivity, Hierarchical algorithms.
+
+1
+
+Introduction
+
+The growth of the Internet and the emergence of application scenarios for large-scale sensor networks is driving the
+need for scalable and reliable solutions to several distributed process group computing problems. Publish-subscribe
+
+1
+
+systems [4], distributed databases [3], distributed failure detection [14], distributed resource location [15], virtual
+synchrony [10], streaming multimedia, are examples of such reliable-multicast based applications. They require a
+group multicast protocol that is a) reliable, even in the presence of packet losses within the network, and process/node
+crashes, and b) scalable, in terms of the load imposed on the network and participating processes/nodes, with system
+size growing into thousands of processes.
+Traditional implementations of such applications work well in small-scale settings, but suffer drastic reduction
+in reliability and performance as the system size is increased. Several studies such as [2, 16, 18] have observed that
+most existing solutions hit a scalability limit in the range of only 50 to 100 participating group members. Scaling
+these solutions beyond this limit is rare, and typically involves introducing rigid constraints that simply increase the
+ceiling to a few hundred members.
+In the realm of group multicast algorithms for Internet-wide receiver groups, best-effort IP multicast has been
+augmented by techniques such as SRM[6] or RMTP[13] that repair packet losses through positive or negative acknowledgments. Request and repair messages are sent at backed off intervals to avoid duplicating these control messages
+within the network; the time intervals used are adjusted adaptively. However, in the face of even small system-wide
+noise in the network, arising out of packet losses, process scheduling delays or process failures, the randomized repair
+mechanisms used by protocols like SRM and RMTP result in a repair and request rate per multicast that increases
+linearly with system size [2, 18]. This limits the scalability of such protocols.
+Epidemic (gossip-based) protocols [2, 3] use randomization to provide probabilistic guarantees on the reliability of
+multicast delivery at recipients. These probabilistic guarantees degrade gracefully in the presence of system-wide noise
+resulting from process failures and message losses - this results from the protocol proactively using randomization
+to fight random unreliability in the underlying network [10]. The protocol can thus be configured to satisfy given
+probabilistic reliability requirements in the presence of very high failure rates in the network. The protocol scales
+because the overhead imposed per group member increases only logarithmically with group size. Compared to
+SRM, RMTP, etc., reliable multicast protocols based on epidemic-style dissemination have been shown to provide
+stable multicast throughput in large perturbed groups [2]. Deterministic reliability is provided by ’backing up’
+the probabilistic guarantees with a recovery layer higher in the application network stack. The good probabilistic
+guarantees of gossiping ensure that the load at this higher layer can be made independent of the group size [10].
+Gossip-based algorithms have become popular in implementing scalable solutions to publish-subscribe systems
+[5], distributed failure detection [14], resource discovery [15], virtually synchronous multicast [10]. In these protocols,
+group members periodically gossip about received multicasts to randomly chosen nodes. Implementations differ in
+the length of gossip round, and the weighing of members for gossip target selection. “Flat Gossiping” is the canonical
+
+2
+
+implementation, where targets are chosen uniformly at random (flatly) from the entire group membership.
+Previous work [2, 3, 5, 12, 14] has taken the view that receiving multiple copies of each multicast in gossip-based
+protocols is “necessary evil” to achieve the given probabilistic reliability. However, when the underlying network has
+few or no message losses and process failures during the dissemination of a multicast, Flat Gossiping still incurs this
+overhead. More generally, Flat Gossiping lacks adaptivity to underlying network failures, in the sense of imposing
+lower overhead when there are fewer failures.
+Flat Gossiping also imposes a high load on core elements of the network, as it does not take network locality
+into account. Choosing gossip targets uniformly from the entire membership leads to the gossip messages traveling
+across multiple network hops. This imposes a bandwidth load on core router links that potentially increases linearly
+with the group size. As router links can sustain at most a constant bandwidth, this network overhead limits the
+deployability of Flat Gossiping over large topologies, such as a wide area network (WAN) or a corporate virtual
+private network (VPN).
+In this paper, we propose a new framework for multicast dissemination that addresses the issues of adaptivity and
+network overhead. The solutions work by defining an abstract hierarchy on the process group, which we call a Leaf
+Box Hierarchy, and using this hierarchy for the multicast dissemination. We present a) an Adaptive Dissemination
+Framework (or protocol) that can be used with any gossiping primitive, and b) a new Hierarchical Gossiping algorithm
+(or protocol). We also show how the Leaf Box Hierarchy can be mapped on to Internetwork-type topologies, so that
+these two algorithms have low network overhead. These algorithms require group members to maintain a partial
+membership list (called a view) whose size grows slowly - with the square of the logarithm of the group size. These
+algorithms guarantee probabilistic multicast reliability properties that are comparable to Flat Gossiping. Simulation
+results are presented to validate the improvement due to the new protocols, as compared to the Flat Gossiping
+protocol.
+The rest of the paper is organized as follows. Section 2 describes the Flat Gossiping protocol and previous
+work addressing the adaptivity and network overhead issues. Section 3 presents the Leaf Box Hierarchy and view
+maintenance algorithms used by our new Adaptive Dissemination Framework (Section 4) and Hierarchical Gossiping
+algorithm (Section 5). Section 6 presents simulation results for evaluating the Adaptive Dissemination framework,
+and comparing the new Hierarchical Gossiping algorithm with Flat Gossiping. We conclude in Section 7.
+
+2
+
+Previous Work and Design Guidelines
+
+Flat Gossiping We chose Flat Gossiping as a representative of gossiping protocols and evaluated our approach
+against it. The Flat Gossiping protocol disseminates a multicast by having each group member, that receives the
+
+3
+
+Process group
+
+At infected member
+- b random targets per gossip round
+- log(N) gossip rounds
+
+Figure 1:
+
+Flat Gossiping: After receiving a multicast, the infected group member gossips about it for log(N ) rounds, choosing b gossip
+
+targets in each round. These target members are chosen uniformly at random from the entire group membership.
+
+multicast, gossip about the multicast for log(N ) rounds. Here N is the (approximate) group size and a round is a
+fixed local time interval at the member. In each round, the group member selects b other members uniformly at
+random from the group membership, and informs them of the multicast; b is a constant. The term “Flat Gossiping”
+arises from the uniform choice of gossip targets flatly from across the group membership.
+
+1
+
+This is shown in Figure 1.
+
+Each group member maintains a view - a (partial) list of other members in the group. The targets in gossip rounds
+are chosen at random from the current view at the member.2
+With these parameters, [3, 12] has shown that the probability that any (given) member receives the multicast is
+1−
+
+1
+Nb
+
+· (1 + o(1)), which scales well with N . The number of rounds from the origin to completion of the gossip is
+
+O(log(N )), which also scales. This gossip-based protocol is fault-tolerant: it “routes around” member failures and
+dropped messages. For example, even if the system drops half of the (gossip) messages, the probability that any
+(given) member receives the multicast is 1 −
+
+1
+N b/2
+
+· (1 + o(1)).
+
+We now elaborate on the adaptivity and network overhead problems in Flat Gossiping, our approaches to solving
+them, and previous work in this direction.
+Adaptivity Adaptivity requires incurring lower overhead (by sending fewer messages) when there are fewer message
+losses and process failures. Our approach to adaptivity is to disseminate the multicast via a logical tree first,
+transitioning to gossiping only when failures are detected. Two possible options for such a multicast tree are IP
+multicast trees [2], or statically constructed overlay networks [11]. However, the former is usually not activated in
+1 [2,
+
+3] use this version of Flat Gossiping. The Flat Gossiping algorithms of [5] select all blog(N ) targets in just one gossip round, but
+
+this results in similar reliability, scalability, adaptivity and network overhead properties.
+2 This paper considers only the “push”version of Flat Gossiping. Our observations and results are applicable to the complementary
+approach of “pull” gossip, where each member actively requests other (randomly selected) group members for new multicasts that it has
+not yet received.
+
+4
+
+Router/Switch
+
+Domain 2 : O(N) group members
+
+Domain 1: O(N) group members
+
+O(N) messages per gossip round
+pass through router links
+
+Figure 2:
+
+High Network Overhead of Flat Gossiping: In a WAN-wide process group distributed evenly across two subnets, when there
+
+are O(N ) infected members in the group, O(N ) gossip messages in each round go across the connecting router. The bandwidth usage on
+this core router would need to grow linearly with group size.
+
+networks, and the latter requires reconfiguration on every member failure within the group 3 . Besides, both these
+schemes resort to gossiping within the entire group on even a single message loss or process failure.
+Instead, we use our Leaf Box Hierarchy to dynamically generate such a tree for each multicast. The tree construction is local to each member, and topological mappings of the Leaf Box Hierarchy reduce the network overhead
+due to the tree messages. Further, as in [8], given a small number f , the tree dissemination scheme can be made
+f -fault-tolerant, avoiding transitioning to gossiping when there are fewer than f failures. Finally, gossiping that
+results from a message loss is localized within the Leaf Box Hierarchy, limiting system-wide repercussions of local
+failure events.
+Network Overhead When the process group is distributed over a large Internetwork-type topology (such as a WAN
+or an Internet-wide VPN, with multiple domains connected by routers), Flat Gossiping may overload router links
+with gossip messages. In the worst case, the load on a single router link could grow linearly with the group size, as
+shown in the example topology of Figure 2. As core router links have a fixed upper bound on bandwidth usage, this
+limits the scalability of the gossiping mechanism.
+This problem could be solved by tailoring the choice of targets to the specific underlying topology, as in [3], but
+a more general strategy applicable to any topology is more desirable. Increasing the gossip round length linearly
+with group size solves this problem, but causes a linear increase in multicast dissemination latency. [15] proposes
+a gossiping strategy where targets are probabilistically weighted so that in every gossip round, an average of one
+gossip message transitions out of any given network domain (and thus the router link connecting to this domain).
+However, arbitrary distributions of group members across domains could result in a high multicast dissemination
+3 Unfortunately,
+
+the frequency of such an event increases linearly with group size [10]
+
+5
+
+Subtree - **
+
+Subtree - 0*
+
+M7 M3 M8
+Leaf Box - 00
+
+Figure 3:
+
+Subtree - 1*
+
+M6 M5
+
+M2 M4
+
+Leaf Box - 01
+
+Leaf Box - 10
+
+M1
+Leaf Box - 11
+
+Leaf Box Hierarchy for a group of 8 members {M1 . . . M8} with K = 2; there are N/K = 4 leaf boxes.
+
+latency in this scheme. In a hierarchical network topology with k router levels and O(N ) members per leaf domain,
+this latency varies as O((log(N ))k ) [15]. Our weighted gossip target selection scheme is similar to that in [15], but
+it operates over the Leaf Box Hierarchy, rather than over the network topology itself.
+Our new Hierarchical Gossiping and Adaptive Dissemination algorithms achieve a constant bandwidth usage
+(independent of group size) on any core router link (Section 6), with a multicast dissemination latency that grows
+with the square of the logarithm of group size.
+In order to minimize the overheads of memory storage and target computation time during gossip rounds, group
+members need to maintain small view sizes (reflecting their knowledge of the membership information). At the same
+time, the view size should not be so small as to affect the (reliability) properties of the gossiping mechanism using it.
+It is shown in [5, 12] that Flat Gossiping in a group where each member maintains a view with O(log(N ))
+members, chosen uniformly at random from the group membership, effectively guarantees the same reliability and
+scalability properties as Flat Gossiping with complete views at all members. Our protocols need view sizes that vary
+only as the square of the logarithm of the group size.
+
+3
+
+The Leaf Box Hierarchy
+
+This section describes the Leaf Box Hierarchy, an abstract hierarchy that forms the basis of our algorithms in the
+following sections.
+The Leaf Box Hierarchy is adapted from the Grid Box Hierarchy of [9]. The Leaf Box Hierarchy consists of N/K
+leaf boxes, where K is a small, fixed number known at all N group members. All group members know a consistent
+map function H that maps each member identifier to a leaf box in such a way that there are an average of K members
+per leaf box. For simplicity, in the rest of the discussion, we assume that the number of group members N is a power
+
+6
+
+of K - note that the algorithms work even if this is not true.
+Each leaf box thus has a (logK N − 1)-digit address in base K. Now, for all 0 ≤ i ≤ logK N − 1, subtrees of height
+i in the hierarchy contain the set of leaf boxes whose addresses match in the most significant (logK N − i − 1) digits.
+For 1 ≤ j ≤ logK (N ) − 1, we denote the j th internal node ancestor of a member Mi as the root of the height-j
+subtree that Mi lies in. The leaf box address of member Mi is denoted as LBMi (which is the same as H(Mi )). Mi
+can calculate the leaf box address of any other group member Ml , in its view, from the consistent map function H.
+Figure 3 shows a possible division of N = 8 members into 4 leaf boxes with an average of K = 2 members per
+leaf box. The figure also illustrates the hierarchy induced among the members in these leaf boxes. Member M5 ,
+for example, lies in leaf box 01, which in turn lies within the Subtree-0*, which in turn lies within the Subtree-**.
+Leaf Box 01, Subtree-0* and Subtree-** are thus M5 ’s height 0,1,2 -height subtrees respectively. The internal nodes
+labeled Subtree-0* and Subtree-** are the first and second internal node ancestors of M5 respectively.
+
+3.1
+
+Composition of the View
+
+Efficient use of the Leaf Box Hierarchy does not require each node to know global membership information. In this
+section, we describe the requirements on each group member’s partial view.
+Consider a member Mi with a leaf box address LBMi . Member Mi maintains a view that consists of logK N
+subviews V iewMi [0] through V iewMi [logK N − 1]. More intuitively, each node needs to know about a number of
+others nodes at each level of the abstract hierarchy. For each j(0 ≤ j ≤ logK N −1), V iewMi [j] consists of information
+(such as identifiers) about at most subviewsize(N ) other distinct members chosen uniformly at random from among
+the members that agree on at least their most significant j leaf box address digits with that of Mi (i.e., members
+lying in the same height-(logK (N ) − j − 1) subtree as Mi ). Sections 4, 5 show that subviewsize(N ) = O(log(N ))
+suffices to preserve the properties of our algorithms.
+If there are fewer than subviewsize(N ) other members that lie in the height-(logK (N ) − j − 1) subtree of Mi ,
+Mi includes in V iewMi [j] as many such other members that it knows about. Notice that complete knowledge is not
+required in these views. Views might also be partially inconsistent (contain members that have failed) - this does
+not violate the properties of the dissemination algorithms. Such elements time out and are eventually deleted.
+Figure 4 shows the composition of the view at member M5 in the Leaf Box Hierarchy example of Figure 3.
+Group member M5 ’s view would consist of: logK (N ) = 3 subviews, each consisting of subviewsize(N ) = O(log(N ))
+members chosen uniformly at random from the subgroup of members within the respective subtree as M5 .
+Theorem 3.1: If subviewsize(N ) = viewf actor ∗ log(N ), the view graph in the group stays connected with high
+probability ≥ (1 −
+
+1
+).
+N viewf actor−1
+
+7
+
+M5’s view
+
+Subtree - **
+
+View[0]:
+O(log(N))
+
+View[1]:
+O(log(N))
+
+Subtree - 0*
+
+Subtree - 1*
+
+View[2]:
+O(log(N))
+M7 M3 M8
+Leaf Box - 00
+
+Figure 4:
+
+M6 M5
+Leaf Box - 01
+
+M2 M4
+Leaf Box - 10
+
+M1
+Leaf Box - 11
+
+View Maintenance: Each group member (M5 shown above) knows about O(log(N )) other members in each of the Leaf Box Hi-
+
+erarchy subtrees it belongs to. An example view for M5 above is V iewM5 [0] = {M2 , M1 , M7 }, V iewM5 [1] = {M7 , M8 , M6 }, V iewM5 [2] =
+{M6 }.
+
+Proof: A random graph with N nodes, and edges from each node to (c + log(N )) other randomly chosen nodes,
+−c
+
+stays connected with probability e−e
+
+[12]. Although [12]’s proof assumes c to be a constant, a similar proof can
+
+be derived for c = (viewf actor − 1) · log(N ), which gives us the required result. Details are omitted for brevity.
+
+2
+
+Although a discussion of the dynamic membership algorithm is out of the scope of this paper, one of several
+membership maintenance algorithms such as all-to-all heartbeating, SCAMP [7], etc., could be used. For example,
+most distributed systems employ an all-to-all heartbeating mechanism for failure detection purposes. Each group
+member, during its presence in the group, periodically sends out incremented heartbeats to every other member.
+Arriving heartbeats at member Mi are probabilistically included in subviews (replacing other elements in these
+subviews), maintaining the uniform distribution of choice of subview elements from the respective set of prospective
+members.
+
+3.2
+
+Topologically-aware Map Functions
+
+We now discuss different strategies for mapping the Leaf Box Hierarchy to Internetwork-type networks (such as
+WANs, or corporate VPNs).4 An Internetwork is structured in several hierarchical levels. It typically consists of
+several domains, each of which contain several sub-domains, and so on. For example, a Wide Area Network (WAN)
+consists of several subnets, each of which consists of several LANs. A corporate VPN consists of an intranet per
+company location (these intranets might be further composed of multiple subnets or LANs), connected by an overlay
+network [17]. We will henceforth call any level of the hierarchy as a ”domain”. We showed an example of such a
+topology in Figure 2.
+4 Topological
+
+mappings can be derived for other scenarios such as a wireless ad-hoc network [9].
+
+8
+
+Subtree - **
+
+Domain 1
+
+Domain 2
+
+Subtree - 0*
+
+M7 M3 M8
+Leaf Box - 00
+
+Figure 5:
+
+Subtree - 1*
+
+M6 M5
+
+M2 M4
+
+M1
+
+Leaf Box - 01 Leaf Box - 10 Leaf Box - 11
+
+Contiguous Mapping for the topology from Figure 2.
+
+The bandwidth available within a LAN typically scales with the number of machines on the LAN. Across LANs
+(in general, across domains) however, bandwidth availability is limited by the core router links that the traffic has
+to traverse [14]. Router links can typically take only a constant amount of bandwidth (bits per second). This limits
+the deployability of a protocol such as Flat Gossiping across a WAN, as discussed in Section 2.
+There are several possible ways of obtaining a mapping H adapted to the above kind of hierarchical Internetworktype topology. They differ in the scheme for assigning a set of leaf boxes to each domain at each level of the
+Internetwork topology hierarchy. Among all the schemes we considered, the Contiguous Mapping is the most efficient,
+and is used in the rest of the paper.
+The Contiguous Mapping assigns to each network domain a contiguous set of leaf boxes (ordered lexicographically
+by their addresses) within the Leaf Box Hierarchy. A group member thus belongs to a randomly chosen leaf box from
+among the ones assigned to the LAN that the member belongs to. Figure 5 shows a possible Contiguous Mapping
+for the example process group in the topology of Figure 2.
+The Contiguous Mapping does not assume any particular distribution of group members across the network
+topology. Our Hierarchical Gossiping algorithm and Adaptive Dissemination Framework use the abstract Leaf Box
+Hierarchy, assuming no particular topological mapping, although the Contiguous Mapping gives the best properties.
+With the goal of focusing on the actual mechanism used to make the mapping topologically aware, we will assume
+the existence of a central server with knowledge of the layout of the underlying network topology below the process
+group. This central server computes the topologically aware mapping function H, based on the current distribution
+or long-term probability distribution, of group members across this underlying topology 5 , and then disseminates this
+information out to the group members. The Leaf Box Hierarchy needs reorganizations only when the group size N
+crosses a power of K (the number of leaf boxes is changed) or the distribution of group members changes significantly.
+5 Note
+
+that not all machines in a domain may be group members
+
+9
+
+If these are infrequent events, the server does not need to be highly available; the system will continue to function
+if the hierarchy reorganization is delayed by the server’s unavailability. Efficient distributed computation of such a
+topologically-aware mapping function for highly-dynamic groups is a topic for future study.
+
+4
+
+Adaptive Dissemination Protocol
+
+4.1
+
+Protocol Overview
+
+The Adaptive Dissemination protocol relies on the Leaf Box Hierarchy presented above and consists of two subprotocols: the Tree Dissemination and Gossip protocols. The Tree Dissemination sub-protocol uses the Leaf Box
+Hierarchy to dynamically construct a tree per multicast, and disseminate the multicast by propagating Tree messages along this tree to the leaf boxes. The tree construction is entirely distributed, with each member using hop
+numbers in the forwarded Tree message to decide locally, using its partial views, which child members to forward
+the message to next (thus constructing the tree dynamically). When there are no failures or messages losses during
+the dissemination of the message, the protocol delivers at most a constant number of copies of each multicast at each
+member, irrespective of group size. When a process failure or message loss hinders further propagation of a multicast
+in some part of the hierarchy, members transition to the gossiping sub-protocol, and disseminate the multicast in
+the appropriate subtree(s) of the Leaf Box Hierarchy.
+
+4.2
+
+Protocol Description
+
+Every Adaptive Dissemination message m bears exactly one multicast6 , and is associated with the following elements:
+• Hop number h;
+• Ancestor list Anc[1, a], valid only if m is a Tree message. Anc is a list of identifiers of some nodes that this
+multicast has passed through so far;
+• Type t of the message. t can be either Tree or Gossip.
+Each message is denoted as a tuple (m, h, Anc, a, t). We abuse notation to denote the elements of such a message
+m as m.h, m.Anc, etc, and call a message m with type =Tree (resp. Gossip) as a Tree message (resp. Gossip
+message). We will also show that this extra data in the message has an expected constant size, and a worst case size
+that is logarithmic in the group size.
+For simplicity of presentation, the description of the algorithm and the theorems assume that all process failures
+occur prior to the start of the dissemination. We explain later how to relax this assumption for a more general
+6 Batching
+
+of multiple multicasts into the same gossip message leads to a similar analysis.
+
+10
+
+failure model, while retaining the adaptivity property. Message losses are allowed to occur during the execution of
+the protocol. The pseudo-code for the Adaptive Dissemination algorithm is shown in Figure 6.
+Tree Dissemination sub-protocol In this protocol, the multicast sender starts out by sending itself a Tree
+message with hop count h = 0. A group member Mi , on receiving a multicast through a Tree message m with hop
+number m.h < logK (N ) − 1, attempts to forward this message to K randomly chosen child members, one in each of
+the child subtrees of the (logK (N ) − m.h − 1)th internal node ancestor of Mi in the Leaf Box Hierarchy. Member
+Mi cannot choose as a child member any member that is already present in the ancestor list (m.Anc) of the Tree
+message it received. The hop count in the message is incremented every time it is forwarded. Every forwarded Tree
+message’s ancestor (Anc) list is modified to include those ancestors (including Mi ) that lie in the subtree that the
+message is being forwarded into.
+When a group member Mi receives a multicast through a Tree message with hop number h = logK (N ) − 1, this
+message needs to be forwarded within Mi ’s leaf box. This is done by using Flat Gossiping within the leaf box.
+For example, in Figure 7, the sender member (M8 ) chooses two children, one from each of the child subtrees of
+the 3 − 0 − 1 = 2nd internal node ancestor in the Leaf Box Hierarchy (essentially the root internal node). M8 chooses
+M3 and M4 . When M3 (respectively. M4 ) receives the multicast through the Tree message from M8 , it notices the
+hop count of 1, and selects two children randomly, one from each of the child subtrees of its 3 − 1 − 1 = 1st internal
+node ancestor. These child subtrees happen to be leaf boxes - the members M7 and M5 (respectively. M2 and M1 )
+that receive the Tree message with hop count = 2 = logK (N ) − 1 resort to Flat Gossiping (for a fixed constant
+number of gossip rounds) to disseminate the multicast within their leaf boxes.
+All Tree messages require to be acknowledged by the recipients. Non-receipt of an acknowledgment from a child
+member results in transitioning to a gossip protocol within the requisite subtree, as explained below.
+
+Transition to Gossip sub-protocol Consider a member Mi that has received a Tree dissemination message m
+with hop count h. Mi will attempt to forward Tree messages to K children, one from each of the child subtrees
+of its (logK (N ) − h − 1)th internal node ancestor, ignoring candidates that occur in the ancestor list m.Anc. The
+tree dissemination protocol cannot make progress if Mi : a) does not know of any members in at least one of the
+child subtrees of its (logK (N ) − h − 1)th internal node ancestor, that is not already present in m.Anc, or b) does
+not receive acknowledgments from the members that it chooses to forward the Tree message to. Cases (a) and (b)
+could occur as views are not required to be complete, due to the chosen child members being faulty, or the forwarded
+Tree messages being dropped within the network. If either of cases (a) or (b) occur, at member Mi , Mi transitions
+
+11
+
+to the gossip sub-protocol within its height-(logK (N ) − h − 1) subtree. It does so by spreading a Gossip message
+with hop count = h: Mi uses V iewMi [h] for this purpose.7 A group member might gossip at multiple hop counts, if
+it receives a Gossip message with a lower hop-count than it has seen so far.
+Notice that the algorithm is not restricted to use a specific gossip primitive. This choice is made by the designer
+of the distributed system. One could use Flat Gossiping, or Hierarchical Gossiping, as we do in our simulations of
+Section 6.
+Figure 7 shows an example run of this protocol in the Leaf Box Hierarchy depicted earlier in Figure 3. For
+example, if the acknowledgment from M2 to M4 were to be dropped, M4 would resort to spreading the multicast
+through gossip within Subtree-1* with a hop count=1.
+
+4.3
+
+Protocol Analysis
+
+The following theorems analyze the per-member load, reliability and Tree message size of the Adaptive Dissemination Protocol.
+Theorem 4.1 (Per-member load): The number of Tree dissemination messages (of a given multicast) sent or
+received by any member is bounded by a constant, independent of group size.
+Proof : From the use of the ancestor lists in Tree messages and choice of children, each internal node in the tree
+defined by the Tree messages for the given multicast (which corresponds to tree defined by the Leaf Box Hierarchy)
+is associated with at most one member, and each member can occur at at most one internal node in this tree
+(Figure 7). This implies receipt of at most 1, and transmission of at most K Tree messages at any member.
+
+2
+
+Theorem 4.2 (Reliability): For each multicast, every leaf box in the Leaf Box hierarchy either: a) receives at
+least one Tree message, or b) belongs to a subtree where the gossip is initiated. Thus, the Adaptive Dissemination
+protocol achieves at least as good reliability as the gossip primitive it uses.
+If Flat Gossiping is used as the gossip protocol in the Adaptive Dissemination protocol, subviewsize(N ) =
+O(log(N )) is sufficient to maintain the same reliability properties as with a complete knowledge of the group membership. This is because in each potential gossip subgroup (corresponding to the subtrees in the Leaf Box Hierarchy,
+and with size at most N ), a view size of O(log(N )) members chosen uniformly at random from a subgroup of size is
+sufficient to retain the reliability properties of Flat Gossiping [12].
+Theorem 4.3 (Message size): The ancestor list size in a Tree message has constant expected size, and (logK (N )−
+1) elements in the worst-case.
+7 If
+
+V iewMi [h] is empty, Mi will attempt V iewMi [h − 1] and so on.
+
+12
+
+Sender Ms of multicast message m:
+gossip f lag := f alse
+for i := 0 to K − 1,
+pick a random member Mj from V iewMs [0] such that < LBlogK N −2 >Ms == i.
+(if no such member exists, set gossip f lag := true and break from for loop)
+Message m0 ← (m, 1, ∅, 0, Tree).
+if (< LBlogK N −2 >Ms == i)
+m0 .a = 1, m0 .Anc ← {Ms }
+Send m0 to Mj
+WAIT (timeout) for acknowledgments
+If gossip f lag := true or have not received acknowledgment from all targets chosen in earlier for loop
+/* transition to gossiping in entire group */
+m0 ← (m, 0, ∅, 0, Gossip);
+Gossip message m0 through V iewMs [0]
+On first receipt of copy of a message m0 at a member Mi :
+Acknowledge receipt of this message to parent
+if m0 == (m, h, Anc, a, Tree) and m0 .h < logK (N ) − 1
+h = m0 .h
+gossip f lag := f alse
+for i := 0 to K − 1
+pick a random member Mj from V iewMs [h] such that
+/ m0 .Anc
+< LBlogK N −h−2 >Mj == i, and Mj ∈
+(if no such member exists, set gossip f lag := true and break from the for loop)
+m00 ← (m0 , m0 .h + 1, ∅, 0, Tree).
+For each member Mb in m0 .Anc that lies in the same subtree
+as members in V iewMs [h], and has < LBlogK N −h−2 >Mb == i
+m00 .a := m00 .a + 1, m00 .Anc ← m00 .Anc ∪ {Mb }
+if (< LBlogK N −h−2 >Ms == i)
+m00 .a := m00 .a + 1, m00 .Anc ← m00 .Anc ∪ {Ms }
+Send m0 to Mj
+WAIT (timeout) for acknowledgments
+If gossip f lag := true or have not received acknowledgment from all targets chosen in earlier for loop
+/* transition to gossiping at subtree of height (logK (N ) − h − 1) */
+m0 ← (m, h, ∅, 0, Gossip);
+Initiate Gossip message spread through V iewMi [h]
+else if m0 == (m, h, Anc, a, Gossip) and have never gossiped m0 at hop ≤ m0 .h
+/* continue gossiping */
+Gossip m0 within V iewMi [h]
+else if m0 == (m, h, Anc, a, Tree) and m0 .h = logK (N ) − 1
+/* gossip within leaf box */
+Gossip m0 within V iewMi [h]
+
+Protocol steps at a group member. Data in each message is shown in parentheses. < LBj >Mi stands for the j th least
+significant digit in the leaf box address of Mi . Message m is represented as (m, h, Anc, a, t), with multicast payload omitted for brevity.
+Any Gossip primitive can be used within this Adaptive Dissemination framework.
+
+Figure 6:
+
+Proof : A Tree message m with hop count m.h = h has at most h ancestors. As h < logK (N ), the size of Anc is at
+most logK (N ) − 1. For each j (0 ≤ j ≤ h − 1), there is a possible ancestor that falls in the height-(logK (N ) − h − 1)
+subtree that m is being forwarded to, with probability
+
+1
+K h−j
+
+: this is due to the random selection of children in the
+
+tree dissemination algorithm at each group member. The expected size of m.Anc is thus:
+h−1
+X
+j=0
+
+1
+K h−j
+
+≤
+
+1
+K
+
+1−
+
+1
+K
+
+=
+
+K
+K −1
+
+2
+
+which is a constant since K is chosen independent of N .
+
+13
+
+Subtree - **
+
+M8
+Gossiping if M4->M2
+TREE message dropped
+
+h=1
+
+Subtree - 0* M3
+
+Subtree - 1*
+
+h=2
+M7
+M7 M3 M8
+Leaf Box - 00
+
+Figure 7:
+
+M6
+M6 M5
+Leaf Box - 01
+
+M4
+h=2
+
+M5
+
+M1
+
+M2
+M2 M4
+
+Leaf Box - 10
+
+M1
+Leaf Box - 11
+
+Adaptive Dissemination of a multicast from member M8 in in the example from Figure 3. The Tree Dissemination attempts
+
+to push the multicast to as many leaf boxes as possible (hop counts shown). If message losses, process failures or incomplete views prevent
+further Tree Dissemination at a member (as in loss of the Tree message with hop count 2 from M4 to M2 ), the protocol transitions to
+Gossiping within the requisite subtree (Subtree-1* with hop count 1). For simplicity, the ancestor lists on the Tree messages are not
+shown.
+
+4.4
+
+Network Overhead Analysis
+
+We now analyze the network overhead imposed by the Tree Dissemination sub-protocol of the Adaptive Dissemination
+protocol, under the Contiguous topological Mapping scheme for the Leaf Box Hierarchy. For a domain D, assigned
+to a contiguous set of leaf boxes L(D), consider the set of internal nodes in the Leaf Box Hierarchy (call it IN (D, L))
+composed of the non-common internal node ancestors of 1) the left-most leaf box (lexicographically ordered) among
+this contiguous set L(D), and 2) the right-most leaf box (lexicographically ordered) among L(D). For L(D) with
+just one leaf box, IN (D, L) is defined as the lowest internal node ancestor of L(D). In the example Contiguous
+Mapping shown in Figure 5, for the topology of Figure 2, for Domain D = 1, the set L(D) = {01, 10, 11} and
+IN (D, L) = {Subtree − 0∗, Subtree − 1∗}.
+Claim 4.4: Assume that a (Tree or Gossip) message from any member Mi to any another member Mj is routed
+from Mi ’s leaf box up to its lowest common internal node ancestor with the leaf box of Mj , and then back down to
+Mj ’s leaf box. Then, for a domain D assigned a contiguous set of leaf boxes L(D) in the Leaf Box hierarchy, every
+message passing out of (into) a router link connecting to this domain passes through at least one of the internal
+nodes in IN (D, L).
+Proof: Consider a message from a member Mi (in domain D) to another member Mj (outside domain D) that is
+routed as above, but does not pass through any internal node in the set IN (D, L).
+Without loss of generality, let Mi ’s leaf box LBMi be to the left of Mj ’s leaf box LBMj (in lexicographic order).
+D
+Let the left-most and right-most leaf boxes of L(D) be LD
+lef t and Lright respectively. The leaf box addresses are then
+
+14
+
+D
+D
+D
+related as: LD
+lef t ≤ LBMi ≤ Lright ≤ LBMj . However, if Llef t = LBMi or Lright = LBMi , any message out of Mi ’s
+
+leaf box will pass through IN (D, L), a contradiction. Similarly, LD
+right 6= LBMj since Mj lies outside D. We thus
+D
+have LD
+lef t < LBMi < Lright < LBMj .
+
+From this order and the tree structure of the Leaf Box Hierarchy, the the two “paths” (as defined in the Claim
+D
+statement) between LBMi and LBMj , and between LD
+lef t and Lright , have to intersect each other at some internal
+
+node. This internal node then lies on IN (D, L) as well as on the Mi to Mj path, a contradiction.
+
+2
+
+Fact 4.5: For any contiguous set of leaf boxes L, IN (D, L) has size at most 2 ∗ logK (N ).
+Theorem 4.6 (Network overhead): The Contiguous topological Mapping scheme ensures that the number of
+times a given multicast is replicated by the tree dissemination protocol, across any router link connecting to any
+domain, is at most O(log(N )) times on average, and O((log(N ))2 ) times in the worst case.
+Proof:
+
+We first prove that using the routing of Claim 4.4 the number of Tree messages passing through any
+
+internal node in the abstract Leaf Box Hierarchy is logarithmic in the worst case, and E[O(1)]. The theorem then
+follows from Fact 4.5.
+Consider an internal node INh , that is the root of a height-h subtree in the Leaf Box Hierarchy (0 ≤ h ≤ logK (N )).
+INh will see at most (logK (N ) − h) Tree messages (hop counts ranging from 1 through (logK (N ) − h)) passing
+down through it, and for each one of these messages, at most K other Tree message passing back up through it
+(forwarded Tree message with an incremented hop count). The worst case number of Tree messages seen by INh
+is thus (K + 1) · (logK (N ) − h) = O(log(N )).
+INh sees a Tree message with hop count j (1 ≤ j ≤ logK (N ) − h) with probability
+
+1
+K logK (N )−h−j
+
+- this follows
+
+from the random child selection in the tree dissemination protocol. Each choice of a target from the INh -rooted
+subtree, for a Tree message with hop count < h, results in at most K extra messages passing back up through INh
+(forwarded Tree message with an incremented hop count). Thus, the expected number of Tree messages through
+Plog (N )−h
+2K
+1
+· (K + 1) ≤ K−1
+· (K + 1) = O(1).
+2
+INh is j=1K
+K logK (N )−h−j
+4.5
+
+On the Failure Model
+
+Relaxing the failure model
+
+Our discussion above has assumed that all process failures occur prior to the start of
+
+the multicast dissemination. Relaxing this assumption to allow process failures during the protocol requires a group
+member Mi participating in the tree dissemination protocol to buffer a Tree message (with hop count h) until
+receipt of a second acknowledgment from the child members chosen for this multicast. This second acknowledgment
+is generated to the parent of the Tree message on either: a) receiving (second) acknowledgments from all K children
+
+15
+
+in the Tree Dissemination protocol, or b) initiating gossip within the requisite subtree. Non-receipt of the second
+acknowledgment from one of the children causes Mi to treat this as a failure of the child, and to initiate a gossip
+within the requisite subtree.
+This modification to the protocol results in one extra message per multicast per group member and a worst case
+logK (N ) rounds increase in multicast dissemination latency, but does not change the guarantees of the protocol. If
+the sender (of the multicast) stays non-faulty throughout the execution of the protocol, Theorem 4.2 holds true.
+Tree Dissemination for up to f failures The Adaptive Dissemination protocol can be generalized to have any
+member tolerate up to f process failures or message losses (by trying up to f prospective child members for the
+Tree message), before transitioning to gossiping.
+
+5
+
+A New Hierarchical Gossiping Protocol
+
+This section introduces a new Hierarchical Gossiping protocol within the Leaf Box Hierarchy. With the Contiguous
+Mapping, this protocol tackles the network overhead problem. When used within the Adaptive Dissemination
+framework, the Hierarchical Gossiping protocol solves both the adaptivity and network overhead problems.
+
+5.1
+
+Protocol Description
+
+The Hierarchical Gossiping protocol differs from Flat Gossiping in the selection of targets during gossip rounds. The
+basic idea in reducing network overhead is to correlate the probability of choosing a particular member to its locality
+so that closer nodes have a higher probability to be chosen as a gossip target by a member. This is achieved by
+first defining the Hierarchical Gossiping protocol on the abstract Leaf Box Hierarchy, then leveraging it with the
+Contiguous Mapping.
+Group member Mi chooses a target that lies in Mi ’s leaf box (subtree of height 0 in the Leaf Box hierarchy) with
+1
+∗ p(N, K), in Mi ’s subtree of height 1 with probability K12 ∗ p(N, K), and so on. Here, p(N, K) =
+probability K
+Plog (N ) 1 −1
+, is a normalizing factor. Generalizing, for j = 0 . . . logK (N )−1, Mi chooses a target uniformly from
+( j=1K
+Kj )
+
+the array V iewMi [logK (N ) − j − 1] (Mi ’s subtree of height j) with probability
+
+1
+K j+1
+
+∗ p(N, K). Hierarchical Gossiping
+
+at group member Mi thus prefers selection of gossip targets that are closer to Mi in the Leaf Box Hierarchy.
+The other parameters of Hierarchical Gossiping are similar to those in Flat Gossiping described in Section 2. Upon
+receiving a multicast, a group member Mi gossips about it for logK (N ) gossip rounds, choosing b target members
+per round. These parameters and the gossip round duration are fixed as in Flat Gossiping.
+Figure 8 shows the (relative) target choice probability distribution for each gossip round at member M5 in the
+Leaf Box Hierarchy of Figure 3.
+16
+
+M5’s target choice probabilities
+Subtree - **
+
+1/K^3
+
+1/K^2
+
+Subtree - 0*
+
+Subtree - 1*
+
+1/K
+M7 M3 M8
+Leaf Box - 00
+
+Figure 8:
+
+M6 M5
+Leaf Box - 01
+
+M2 M4
+Leaf Box - 10
+
+M1
+Leaf Box - 11
+
+Hierarchical Gossiping: M5 ’s gossip-target probability distribution.
+
+The Hierarchical Gossiping protocol fits well into the Adaptive Dissemination framework described in Section 4.
+When a group member Mi receives a gossip message with hop count h, it uses exactly the above-described Hierarchical
+Gossiping algorithm, but with logK (N ) replaced by (logK (N ) − h − 1) everywhere. In other words, the Hierarchical
+Gossiping protocol at Mi works only within the Mi ’s height-(logK (N ) − h − 1) subtree.
+
+5.2
+
+Protocol Analysis
+
+We now analyze the reliability, group member load and minimal view size characteristics of this algorithm.
+Theorem 5.1 (Reliability): Let K = 2, N be a power of K = 2, and assume that each leaf box contains exactly
+K = 2 members. Define f (N ) = probability of a given member not receiving any copy of the multicast in a Leaf
+Box Hierarchy with N members (a height-(log2 (N ) − 1) hierarchy). Then, using the “deterministic style” of analysis
+of epidemic protocols from [1],
+f (2N ) ≤
+
+f (N )
+1
+eβ·(1− N )·(1−f (N ))
+
++
+
+1
+2 · N (1−f (N ))·β/2·log2 (e)
+
+for some β ≥ 1. When f (N )  1 (our simulations show that this occurs at even low group sizes) and N  1, this
+)
+1
+, 2·N β/2·log
+).
+becomes f (2N ) ≤ 2 · max( f (N
+2 (e)
+eβ
+
+Proof: With zero system-wide failure rate, we shall show that the result holds with b = β. A similar proof holds for
+a non-zero system-wide failure rate, with b scaled up appropriately.
+Increasing the group size from N to 2.N adds an extra level to the Leaf Box Hierarchy (making it a height(log2 (2N ) − 1) tree), as well as increases the number of gossip rounds per member by one.
+In a Leaf Box Hierarchy of height-(log2 (2N ) − 1), a member Mi lies in the same height-(log2 (N ) − 1) subtree
+as the sender member, with probability
+
+1
+2
+
+- such a member will not receive the multicast if it does not receive the
+
+multicast through gossiping within the height-(logK (N ) − 1) subtree with N members, as well as from the extra
+17
+
+gossip round added due to the number of group members being increased to 2N . This happens with probability at
+most f (N ) · (1 −
+
+1
+1 N (1−f (N ))(1− N
+)b
+.
+N)
+
+A member Mi lies in a different height-(logK (N ) − 1) subtree than the sender (child subtree of the root internal
+node of the entire hierarchy) with probability
+
+1
+2.
+
+Such a member Mi will not receive the multicast if either 1)
+
+no gossip message is sent from the sender’s height-(logK (N ) − 1) subtree to Mi ’s height-(logK (N ) − 1) subtree,
+or 2) if (1) does not hold, but gossiping within this subtree fails to deliver the multicast to Mi . (1) occurs with
+probability (1 −
+most f (N ) · (1 −
+
+1 N ·(1−f (N ))·b·log2 (N )
+2N )
+
+'
+
+1
+.
+N (1−f (N ))·b/2·log2 (e)
+
+Given (1) is not true, (2) occurs with probability at
+
+1
+1 N (1−f (N ))(1− N
+)b
+.
+N)
+
+Thus, we have:
+f (2N ) ≤
+
+≤
+
+1
+1
+1
+· f (N ) · (1 − )N (1−f (N ))(1− N )b +
+2
+N
+1
+1
+1
+1
+1
+· ( (1−f (N ))·b/2·log (e) + (1 − (1−f (N ))·b/2·log (e) ) · f (N ) · (1 − )N (1−f (N ))(1− N )b )
+2
+2
+2 N
+N
+N
+1
+f (N )
++
+1
+2 · N (1−f (N ))·b/2·log2 (e)
+eb(1− N )(1−f (N ))
+
+2
+Corollary 5.2: A similar version of the above theorem can be proved for values of K 6= 2. This is excluded for
+
+2
+
+reasons of brevity.
+
+Theorem 5.3 (Per-member load): The average number of copies of any multicast received (or sent) by any group
+member is at most b ∗ logK (N ).
+Proof: Every member receiving the multicast gossips about it to at most blogK (N ) targets. As the target selection
+is symmetrical across members, the average number of received copies at a member is also at most blogK (N ).
+
+2
+
+Theorem 5.4 (View size sufficiency): Choosing subviewsize(N ) = viewf actor · log(N ) > b · logK (N ), in the
+view maintenance algorithm of Section 3.1, suffices to retain the reliability properties of Hierarchical Gossiping.
+Proof: The theorem follows from the fact that any V iewMi [j] array (0 ≤ j ≤ logK (N ) − 1) at member Mi consists
+of members chosen uniformly at random from the respective subtree of Mi , and has enough members to support any
+selection of Hierarchical Gossip targets for a given multicast.
+
+5.3
+
+2
+
+Network Overhead Analysis
+
+The following discussion analyzes the network overhead characteristics of the Hierarchical Gossiping algorithm, under
+the Contiguous topological Mapping scheme for the Leaf Box Hierarchy.
+Lemma 5.5: In the Hierarchical Gossiping protocol, any internal node sees an average of at most O(b ∗ log(N ))
+18
+
+copies of any multicast.
+Proof:
+
+Consider an internal node INh at the root of a height-h subtree in the Leaf Box Hierarchy (1 ≤ h ≤
+
+logK (N ) − 1). For each member Mi within the subtree with this internal node as the root, the probability that any
+PlogK (N ) 1
+1
+given gossip message from Mi will pass through INh is bounded by p(N, K) · j=h+1
+K j ≤ K h ·(K−1) . Since the
+subtree with INh as root contains an average of K h+1 members, and each of these members chooses b ∗ logK (N )
+gossip targets per multicast, the average number of copies of a given multicast that will pass out through the internal
+1
+.K h+1 =
+node INh is ≤ b.logK (N ). K h ·(K−1)
+
+K
+K−1 .b.logK (N ).
+
+2
+
+Theorem 5.6 (Network overhead): The Contiguous topological Mapping scheme ensures that in the Hierarchical
+Gossiping of Section 5.1, the expected number of times a given multicast is replicated across any router link out of
+any domain is at most O(log(N ) ∗ log(N )).
+Proof: The proof follows from Lemma 5.5 and Fact 4.5.
+
+2
+
+Notice that E[O(log(N ) ∗ log(N ))] is an upper bound on the expected multicast replication at router links
+connecting to any network domain D. This is because Lemma 5.5 gives a pessimistic estimate for internal node load,
+as well as because messages within network domains could be counted as passing through internal nodes in the set
+IN (D, L) for D, according to the routing scheme of Claim 4.4.
+
+6
+
+Experimental Results
+
+This section discusses experimental results from a simulation of Flat Gossiping, the new Hierarchical Gossiping and
+the Adaptive Dissemination algorithm (using the new Hierarchical Gossiping algorithm). Section 6.1 compares the
+characteristics of the new Hierarchical Gossiping protocol with the Flat Gossiping protocol presented in Section 2.
+These experiments show that the Hierarchical Gossiping protocol achieves much lower network overhead and comparable reliability to Flat Gossiping, at the cost of only a small increase in multicast dissemination latency. As a
+result, the Adaptive Dissemination framework is evaluated using the Hierarchical Gossip protocol in Section 6.2.
+All our experiments use a value of K = 2 for the Leaf Box Hierarchy, and the C-library function rand() is used
+to generate leaf box addresses for group members. The Tree Dissemination and gossip protocols are configured as
+follows. Protocol rounds are synchronous at group members8 . In the Tree Dissemination protocol, Tree messages
+are sent only at the start of protocol rounds. In the gossip protocol, each member, after infection by a multicast,
+gossips for logK (N ) + 5 rounds - the extra 5 rounds are required for dissemination within the leaf box itself. In each
+8 This
+
+in conservative as asynchrony in gossip rounds at different members actually leads to a faster dissemination of a gossip than
+
+with synchronous gossip rounds [14].
+
+19
+
+round, it selects b = 3 target members according to the Gossip scheme being used (Flat or Hierarchical). All points
+on the plots are an average of 50 random runs of the protocol with the same parameters, and standard deviation
+bars are shown where necessary.
+Each member chooses at most viewf actor × log2 (N ) members at random from each subtree in the hierarchy that
+it belongs to. Our experiments use viewf actor = 4. The view size is thus bounded by viewf actor · (log2 (N ))2 . As
+the group size rises, the average size of a view as a percentage of the total group size drops very quickly. For example,
+with N = 16383 members, the average size of a view is about 600, or less than 5 % of the group size.
+
+6.1
+
+Flat Gossip versus New Hierarchical Gossip
+
+Figure 9 compares the performance of the Flat Gossiping algorithm (“FlatGssp”) explained in Section 2 with that
+of the new Hierarchical Gossiping algorithm (“HierGssp”) proposed in Section 5. Figure 9(a) shows that the average
+number of times a group member gossips a given multicast varies logarithmically with group size. By using the same
+value of b = 3, this number is held to be the same for both FlatGssp and HierGssp (i.e., Figure 9(a) holds for all
+experiments of Figure 9), in order to compare the performance of their target selection strategies.
+
+Reliability Figure 9(b) shows that with these parameters, the FlatGssp scheme tolerates up to 80 % system-wide
+message loss. HierGssp gives a 100 % multicast delivery reliability for message loss rates up to 50 %. This plot shows
+us that choosing targets uniformly from the group (FlatGssp) gives a higher level of fault tolerance than weighing
+the target choices in HierGssp. However, as message loss rates above 50 % are not likely to occur in a network,
+HierGssp gives practically the same level of fault-tolerance as FlatGssp. Failure of members resulted in similar plots,
+which are not included for brevity.
+
+Network overhead
+
+Figure 9(c) compares the average number of times a multicast is replicated across any single
+
+router link, in the worst case. For FlatGssp, this corresponds to the configuration of Figure 2, and for HierGssp,
+this is calculated by summation of replications at internal nodes, as described in Section 5.3. The number of times a
+single multicast is replicated across a router link grows linearly with group size for FlatGssp, while it increases with
+the square of the logarithm of the group size for HierGssp.
+The average load (messages/time unit) on a router link at any time, due to each multicast, is simply the number of
+times the multicast is replicated across that router link divided by the latency to disseminate the message. Figure 9(d)
+shows that the average router link load due to FlatGssp varies linearly with group size, since the each multicast is
+replicated a linear number of times across the router link. Figure 9(d,e) show that the router link load in HierGssp
+is very low, and grows much more slower than in FlatGssp. In fact, Figure 9(e) shows that the average router link
+
+20
+
+bandwidth usage quickly converges to a limit that does not depend on the group size.
+Latency Figure 9 (f,g) show that the worst case latency for a multicast to reach a group member, using FlatGssp,
+varies logarithmically with group size. Figure 9(g) shows that the latency of HierGssp differs from that of FlatGssp
+by a factor that appears to depend on the logarithm of the group size.
+In conclusion, Hierarchical Gossiping gives comparable reliability to Flat Gossiping, with much lower network
+overhead. Its latency is only a factor of log(N ) more than that of Flat Gossiping.
+
+6.2
+
+New Hierarchical Gossip versus Adaptive Dissemination
+
+Figures 10 and 11 compare the new Hierarchical Gossip protocol (“HierGssp”) with the Adaptive Dissemination
+protocol that uses Hierarchical Gossiping (“Adaptive”). The version of HierGssp tested here is optimized to eliminate
+many messages that stay within leaf boxes (in the original protocol,
+
+1
+K
+
+of gossip messages stay within the sender’s
+
+leaf box). The plots in Figure 10 compare the scalability of the two protocols when there are no failures in the
+underlying network, while Figure 11 compares their adaptivity on failures.
+
+Scalability Figure 10(a) shows that the number of copies of each multicast that any member sees is logarithmic
+with group size for HierGssp, but is an invariant with group size in Adaptive. Figure 10(b) shows that the resulting
+reliability of multicast delivery in Adaptive is comparable to that of HierGssp. Figure 10(c) shows that the number
+of times a given multicast is replicated across any router link (calculated as described in Section 4.4) is logarithmic
+in group size in Adaptive, while it varies as the square of this logarithm in HierGssp. Figure 10(d) shows the average
+router load per time unit (gossip round). The average router bandwidth usage (per multicast) in HierGssp converges
+to a constant (18 messages/gossip round) as the group size is scaled up - similar behavior is observed in Adaptive as
+well; however, the convergence limit is much lower (2 messages/gossip round) than in HierGssp.
+Figure 10(e,f) show that the average latency of Adaptive is smaller than the latency in HierGssp. The former is
+logarithmic in group size, while the latter varies as the square of this logarithm.
+
+Adaptivity
+
+Figure 11(a) shows that the reliability of Adaptive is practically the same as that in HierGssp - both
+
+can tolerate up to 50 % system-wide message losses.
+Figure 11(b,c,d) demonstrate the adaptivity of the Adaptive protocol - at low message loss rates, Adaptive
+imposes low load on individual members, and router links - the behavior of Adaptive under these circumstances is
+similar to the plots in Figure 10. Figure 11(b,c,d) show that as the message loss rate rises, the Adaptive algorithm
+adapts to this increasing message rate, by initiating gossip in subtrees where the original Tree Dissemination protocol
+messages are lost. At low message loss rates, gossiping is initiated lower down in the Leaf Box Hierarchy, while this
+
+21
+
+100
+
+FlatGssp
+HierGssp
+
+90
+
+N=2047,FlatGssp
+HierGssp
+1
+
+80
+
+Messages / member
+
+70
+
+0.8
+
+Reliability
+
+60
+50
+40
+
+0.6
+
+0.4
+
+30
+20
+
+0.2
+
+10
+0
+
+0
+64
+
+1024
+
+4096
+
+(b)
+
+200000
+150000
+100000
+
+30
+
+FlatGssp
+HierGssp
+
+Avg. Router Load per Gossip Round
+
+250000
+
+0.15 0.3 0.45 0.6 0.75 0.9
+
+(a)
+
+Avg. Router Load per Gossip Round
+
+300000
+
+0
+
+Message Loss Rate
+
+5000
+
+350000
+
+16384
+
+Group Size N
+
+FlatGssp
+HierGssp
+
+400000
+
+4000
+
+3000
+
+2000
+
+1000
+
+HierGssp
+
+20
+
+10
+
+50000
+0
+
+0
+4000 8000 12000 16000
+Group Size N
+
+0
+0
+
+4000 8000 12000 16000
+Group Size N
+
+(c)
+
+0
+
+4000
+8000 12000 16000
+Group Size N
+
+(d)
+
+(e)
+5
+
+FlatGssp
+HierGssp
+100
+
+4
+90
+
+Hier/Flat Latency Ratio
+
+0
+
+Latency (# Gossip Rounds)
+
+Avg. Router Replication per Multicast
+
+256
+
+80
+70
+60
+50
+
+3
+
+2
+
+40
+1
+30
+20
+0
+0
+
+4000
+8000 12000 16000
+Group Size N
+
+64
+
+(f)
+
+Figure 9:
+
+256
+1024
+4096
+Group Size N
+
+16384
+
+(g)
+
+Flat Gossip versus (New) Hierarchical Gossip. See Section 6.1 for explanation of plots.
+
+22
+
+adaptation occurs more earlier (higher up in the hierarchy) as message loss rate rises, because of early loss of tree
+dissemination messages. The behavior of Adaptive is better than that of HierGssp until about a message loss rate
+of 15 %. At higher message rates, the extra added cost of Adaptive, compared to HierGssp, occurs because each
+member might be chosen to participate in HierGssp at multiple levels (once in each of the subtrees it lies in) - this
+number is bounded by logK (N ) in the worst case. The plots show in Figure 11(b,c,d) that the average extra added
+cost is, however, very small. This cost could be curtailed if the sender is able to estimate the system-wide message
+loss rate, and directly choose HierGssp at message loss rates above 15% - this option has not been evaluated in our
+simulations.
+Figures 10(d,e) in the Section 6.1 showed that in the absence of message losses, the latency of Adaptive is
+asymptotically better than that of HierGssp. Figure 11(e) shows that the worst case latency in the Adaptive
+protocol is always lower than that in HierGssp, even at higher message loss rates. Notice that there is no dramatic
+increase in the latency of either Adaptive or HierGssp up to a message loss rate of about 50 %.
+Given the results of Sections 6.1 and 6.2, we can conclude that the Adaptive Dissemination protocol using
+Hierarchical Gossiping outperforms the Flat Gossiping protocol too.
+
+7
+
+Conclusions and Future Work
+
+Flat epidemic-style algorithms for multicast dissemination offer good probabilistic guarantees on reliability and
+scalability. However, they suffer from a lack of adaptivity and impose high network overhead on network elements such
+as core routers. Other epidemic-style algorithms either solve this problem partially, or are not generally applicable.
+We have presented the first comprehensive set of solutions to avoid these drawbacks. The new algorithms use an
+abstract hierarchy defined on the process group, called the Leaf Box Hierarchy. We have detailed and analyzed a) an
+Adaptive multicast Dissemination Framework that can be used with any gossiping primitive, and b) a Hierarchical
+Gossiping algorithm. The Leaf Box Hierarchy can be mapped on to any Internetwork-type topology to guarantee
+low overhead (for the Hierarchical Gossiping and Adaptive Dissemination algorithms) on network elements such as
+core routers. Simulation results show that a) the Hierarchical Gossiping algorithm imposes a much smaller network
+overhead than Flat Gossiping, with only a logarithmic rise in multicast dissemination latency; b) the Adaptive
+Dissemination framework reduces the network overhead of multicast dissemination when the network is in a nofailure state, transitioning to gossiping as the failure rate rises. These algorithms require a view size that increases
+with the square of the logarithm of the group size.
+Continuing work is focusing on evaluating various dynamic and distributed membership maintenance algorithms
+and their effect on the algorithms presented in this paper. Further simulations are also aimed at investigating the effect
+
+23
+
+100
+
+HierGssp
+Adaptive
+
+90
+
+2000
+
+HierGssp
+Adaptive
+
+Avg. Router Replication per Multicast
+
+1
+
+70
+
+0.8
+
+60
+
+Reliability
+
+Messages / member
+
+80
+
+50
+40
+
+0.6
+
+0.4
+
+30
+20
+
+0.2
+
+HierGssp
+Adaptive
+
+1500
+
+1000
+
+500
+
+10
+0
+
+0
+64
+
+256
+
+1024
+
+4096
+
+16384
+
+0
+64
+
+Group Size N
+
+256
+
+1024
+
+16384
+
+0
+
+Group Size N
+
+(a)
+50
+
+4096
+
+(b)
+
+HierGssp
+Adaptive
+
+8000 12000 16000
+
+Group Size N
+
+(c)
+3
+
+HierGssp
+Adaptive
+
+2.75
+
+124
+
+2.5
+
+30
+
+20
+
+Adaptive/Gssp Latency Ratio
+
+40
+
+Latency (# Gossip Rounds)
+
+Avg. Router Load per Gossip Round
+
+4000
+
+94
+
+64
+
+34
+
+10
+
+2.25
+2
+1.75
+1.5
+1.25
+1
+0.75
+0.5
+0.25
+
+0
+
+4
+0
+
+4000
+8000 12000 16000
+Group Size N
+
+(d)
+
+Figure 10:
+
+0
+10
+
+40
+
+70 100 130 160 190
+log2(N) ^ 2
+
+(e)
+
+0
+
+4000 8000 12000 16000
+Group Size N
+
+(f)
+
+Hierarchical Gossip versus Adaptive Dissemination: Group Size scaling. Processes and network are non-faulty. See Section 6.2
+
+for explanation of plots.
+
+of benchmark large-scale network topologies and dynamic groups on the Leaf Box Hierarchy and its reconfiguration.
+The presented protocols are also subject to several optimizations, such as the batching of several multicasts within
+the same tree/gossip message.
+References
+[1] N.T.J. Bailey, “Epidemic Theory of Infectious Diseases and its Applications”, Hafner Press, Second Edition, 1975, pp.
+33-35.
+[2] K.P. Birman, M. Hayden, O. Ozkasap, Z. Xiao, M. Budiu, Y. Minsky, “Bimodal Multicast”, ACM Trans. Computer
+Systems (TOCS), 17:2, May 1999, pp. 41-88.
+[3] A. Demers et al, “Epidemic algorithms for replicated database maintenance”, Proc. 6th ACM Symposium on Principles
+of Distributed Computing (PODC), 1987, pp. 1-12.
+[4] P.Th. Eugster, P. Felber, R. Guerraoui, A.-M. Kermarrec, “The many faces of publish/subscribe”, in submission.
+http://lsewww.epfl.ch/ peugster/publications.html.
+[5] P.Th. Eugster, R. Guerraoui, S.B. Handurukande, A.-M. Kermarrec, P. Kouznetsov, “Lightweight probabilistic broadcast”, Proc. Intl. Conf. Dependable Systems and Networks (DSN 2001), pp. 443-452.
+[6] S. Floyd, V. Jacobson, C. Liu, S. McCanne, L. Zhang, “A reliable multicast framework for light-weight sessions and
+application level framing”, Proc. IEEE/ACM Trans. Networking, 5:6, Dec. 1997, pp. 784-803.
+
+24
+
+100
+
+N=2047,HierGssp
+Adaptive
+
+2000
+
+N=2047,HierGssp
+Adaptive
+
+90
+
+Avg. Router Replication per Message
+
+1
+80
+
+Messages / member
+
+Reliability
+
+0.8
+
+0.6
+
+0.4
+
+70
+60
+50
+40
+30
+20
+
+0.2
+
+N=2047,HierGssp
+Adaptive
+
+1600
+
+1200
+
+800
+
+400
+
+10
+0
+
+0
+0
+
+0.15 0.3 0.45 0.6 0.75 0.9
+
+0
+0
+
+0.15 0.3 0.45 0.6 0.75 0.9
+
+Message Loss Rate
+
+Message Loss Rate
+
+(a)
+
+(b)
+20
+
+0
+
+0.15 0.3 0.45 0.6 0.75 0.9
+Message Loss Rate
+
+(c)
+400
+
+N=2047,HierGssp
+Adaptive
+
+N=2047,HierGssp
+Adaptive
+
+Latency (# Gossip Rounds)
+
+Avg. Router Load per Gossip Round
+
+350
+16
+
+12
+
+8
+
+300
+250
+200
+150
+100
+
+4
+50
+0
+
+0
+0
+
+0.15 0.3 0.45 0.6 0.75 0.9
+Message Loss Rate
+
+0
+
+(d)
+
+Figure 11:
+
+0.15 0.3 0.45 0.6 0.75 0.9
+Message Loss Rate
+
+(e)
+
+Hierarchical Gossip versus Adaptive Dissemination: Adaptivity. See Section 6.2 for explanation of plots.
+
+[7] A.J. Ganesh, A.-M. Kermarrec, L. Massoulie, “SCAMP: peer-to-peer lightweight membership service for large-scale group
+communication”, Proc. 3rd Intl. Workshop on Networked Group Communication, Nov. 2001.
+[8] L. Gasieniec, A. Pelc, “Adaptive broadcasting with faulty nodes”, Parallel Computing, 22, 1996, pp. 903-912.
+[9] I. Gupta, R. van Renesse, K.P. Birman, “Scalable fault-tolerant aggregation in large process groups”, Proc. Intl. Conf.
+Dependable Systems and Networks (DSN 2001), pp. 433-442.
+[10] I. Gupta, R. van Renesse, K.P. Birman, “Fighting fire with fire: using gossip to fight stochastic scalability limits”, in
+submission. http://www.cs.cornell.edu/gupta.
+[11] J. Jannotti, D.K. Gifford, K.L. Johnson, M.F. Kaashoek, H.W. O’Toole Jr., “Overcast: reliable multicasting with an
+overlay network”, Proc. Symp. Operating Systems Design and Implementation (OSDI), 2000.
+[12] A.-M. Kermarrec, L. Massoulie, A.J. Ganesh, “Reliable probabilistic communication in large-scale information dissemination systems”, Technical Report MMSR-TR-2000-105, Microsoft Research Cambridge UK, Oct. 2000.
+[13] J.C. Lin, S. Paul, “RMTP: A Reliable Multicast Transport Protocol”, Proc. IEEE INFOCOM, Mar. 1996, pp. 1414-1424.
+[14] R. van Renesse, Y. Minsky, M. Hayden, “A gossip-style failure detection service”, Proc. Intl. Conf. Distributed Systems
+Platforms and Open Distributed Processing (IFIP), 1998.
+[15] R. van Renesse, ”Scalable and secure resource location”, Proc. IEEE Hawaii Intl. Conf. System Sciences, Jan. 2000.
+[16] W. Vogels, R. van Renesse, and K. Birman, “Using Epidemic Techniques for Building Ultra-Scalable Reliable Communication Systems”, Proc. Large Scale Networking Workshop: Research and Practice, Vienna, VA, Mar. 2001.
+[17] “White paper:
+an overview of virtual private networks (VPNs)”, Secure Computing, Mar. 2000.
+http://www.securecomputing.com/pdf/wp vpn.pdf.
+[18] Z. Xiao, K.P. Birman, “A randomized error recovery algorithm for reliable multicast”, Proc. IEEE INFOCOM, Apr. 2001.
+
+25
+
+

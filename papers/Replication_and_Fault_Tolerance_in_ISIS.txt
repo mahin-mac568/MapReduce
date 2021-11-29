@@ -1,0 +1,1068 @@
+REPLICATION AND FAULT-TOLERANCE IN THE ISIS SYSTEM t
+Kenneth P. Birman
+Department o f Computer Science
+Cornell University, Ithaca, N e w York
+
+ABSTRACT
+
+ISIS is also interesting because of the methodology used to build
+the system itself. In particular, a communication layer supporting a
+variety of broadcast 2 protocols has been implemented. These simplify the description of concurrent algorithms, and make it feasible to
+reason about the correctness of the system as a whole.
+
+The ISIS system transforms abstract type specifications into
+fault-tolerant distributed implementations while insulating users from
+the mechanisms used tO achieve fault-toleram:e. This paper discusses
+tedmiques for obtaining a fault-tolerant implementation from a now
+distributed specification and for achieving improved performanc~ by
+concurrently updating replicated data. The system itself is based on a
+small set of communication primitives, which are interesting because
+they achieve high levels of concurrency while respecting higher level
+ordering requirements. The performance of distributed fault-tolerant
+services runnin8 on this initial version of ISIS is found to be nearly as
+good as that of non-distributed, fault-intolerant ones.
+
+The structure of this paper is as follows. The next section
+introduces resilient objects as a basic unit of fault-tolerance. Subsequent sections review the object specification language and show how
+fault-tolerant implementations can be expressed in terms of the communication primitives. The paper concludes by discussing the performance of a prototype and the current goals of the project.
+
+2. Resilient objects
+
+1. Introduction
+
+ISIS extends a conventional operating system by introducing a
+new programming abstraction, the resilient object. Each resilient
+object provides some service at a set of sites, where it is represented
+by components to which requests can be issued using remote procedure calls [Birrel]. A typical ISIS application would be constructed
+by developing conventional front-end programs and interfadng them
+to one or more such objects; in eff,ct, ,..he objects "glue" the resulting
+distributed program together. The programmer can also define new,
+specialized resilient objects ff suitable ones do not already exist.
+
+Our basic premise is that the complexity of fault-tolerant distributed programs precludes their design and development by nonexperts. This complexity seems to be inherent: systcras achieve
+fault-tolerance through redundancy, and thc distributed agreemant
+and synchronization protocols needed to manage rredundant data are
+hard to implement. Moreover, high levds of concurrency are
+required to achieve satisfactory performance, making it difficult to
+reason about correctness in the presense of failures. Alternatives to
+direct implementation of fault-tolerant systeam are needed if faulttolerance is to gain wide applicability.
+
+The translation of a non-distributed specification into a resilient
+object is based on several assumptions about the execution environment and what resiliency should mean. These are addressed in the
+remainder of this section.
+
+The ISIS project seeks to address this need by automating the
+transformation of fault-/nto/erant program specifications into faulttolerant implementations. This is done by replicating code and data
+while ensuring that the resuifi.n8 distributed program gives behavior
+indistinguishable from a single-site instantiation of the original specification. Although there are many systems to assist in the construction
+of distributed and fault-tolerant software (c.f. ARGUS [Liskov-b],
+H)~'q ~ ] ,
+~ O t Y O S [Anchin], LC~YS [Popek], r A m
+[Spector], TANDEM [Bartlett]), ISIS goes furthest in insulating users
+from the details of fault-tolerant programming. Moreover, ISIS
+places few restrictions on programs. In contrast, other systems that
+execute programs fault-tolerantly (CIRCUS [Cooper], AURAGEN
+[Borg]) are restricted to deterministic programs. Such restrictions
+make it hard to design a fault-tolerant service that can be accessed
+concurrently from multiple sites -- the primary use anfidpated for
+ISIS.
+
+2.1. Assumptions about the e n v i r o n ~ t
+ISIS runs on clusters of computer systems communicating over a
+local area network, which must not be subject to part/t/on/n&,
+whereby the network divides into subgroups of sites between which
+communication is impossible. Issues relating to duster interconneo
+lion are deferred to a future paper.
+We assume that the only way sites fail is by hailing (crashing)
+[Schlictlng]. Failure detection and a collection of fault-tolerant broad..
+east protocols are implemented in software on top of the bare network, as described in subsequent sections. Finally, ob~ct specifications are assumed to be correct. Although ISIS will not crash when
+given a buggy specification, the behavior of the resulting object is
+unpredictable. For debugging, a user creates a single-site instance of
+an object and runs it off-line.
+
+Permission to copy without fee all or part of this material is granted
+provided that the copies are not made or distributed for direct
+commercial advantage, the ACM copyright notice and the title of the
+publication and its date appear, and notice is given that copying is by
+permission of the Association for Computing Machinery. To copy
+otherwise, or to republish, requires a fee and/or specific permission.
+
+© 1985
+
+ACM-0-89791-174-1-
+
+12/85-0079
+
+~Thiswork was supportedby the DefenseAdvancedResearchProjectsAgency
+(DoD) under ARPA order 5378, Contract MDA903-85-C-0124,and by the National
+Science Foundation under grant DCR-8412582. The views, cVinionsand findings
+contained in this report are those of the authors and should not be construedas an
+official Departmentof Defensepos;ri,'--.~,policy,or decision.
+aHere, the term "broadcast" refers to a softwareprotocolfor sendinginforrnation from a single source to a ~r~ ~ destinationprocesses. Sttchbroadcasts night
+take advantage of an etheemet oaacast capability, but can be implementedusing
+other interconnectiondevicesas well.
+
+$00.75
+
+79
+
+2. Procedures for manipulating the resilient data. These can be
+given attributes such as create (a new instance of the object is allocated for each invocation), entry (aocesrible to external callers),
+and read-only (does no updates).
+
+2.2. Properties of resBlent obJecta
+Throughout this paper, the term resiliency is used to denote kresiliency, meaning that the following properties are satisfied:
+1. Consistency. The object behaves like a non-distributed one which
+executes requests sequentially and to completion, with no interleaving of executions.
+
+3. Type definitions for the arguments and results of operations.
+Resilient procedures are coded using a version of the C programming language. All of C is available, as are many operating
+system calls. The language has been augmented to include a multitasking facility for internal concurrency, and to provide several new
+statement types:
+1. I10 statements. Resilient data is aceessed using read and write
+statements.
+2. Locking statements. These are used for concurrency control, as
+
+2. Availability. Let f denote the number of components of an object
+that fail simultaneously. If f ~ k then operational coraponents
+continue to accept and process requests.
+& Progress. If f ~ k then operations are executed without blocking,
+despite failures.
+
+4. Recovery. Because ISIS supports replication, two cases should be
+distinguished:
+a. Partial. If f ~ k a failed component restarts automatically
+when its site recovers.
+
+discussed in Sec. 4.1.
+3. Remote procedure calls. A flexible RPC mechanism is provided,
+includin8 nested, recursive, and asynchronous RPC's, as well as
+RPC's in which the function to call is a parameter. RPC is also
+used to invoke most ISIS system functions. Each ca]] executes as
+a transaction.
+
+b. Total If f > k failed components restart automatically when all
+the failed sites recover.
+
+2.3. Legkal execution morld
+
+4. Abort return. A normal return from a resilient procedure is interpreted as a corarait of the subtransaction that was being executed.
+In an abort return, the effects of the procedure (and any that it has
+invoked) are erased.
+
+Although concurrent access to objects will be common, it is
+hard to reason about the correctness of interleaved executiom. This
+comideration underlies the consistency requirement given above -intuitively, that a resilient object should always look idle to its users,
+and that the effect of a correct concurrent execution should be the
+same as for some correct but non-concurrent one.
+
+5. Cobegin. A set of branches (statements) are specified f ~ concurrent execution. The cobegin terminates when all of its
+branches terminate. Return is not permitted in a cobegin branch.
+Cobegin branches execute as tasks within a single address space.
+Currently, these all run at a single rite, although a more flexible
+cobegin , which might provide some form of explidt control over
+replicated processing, is under consideration for tha future. The
+statement is normally used to keep a computation active while
+some branch is blocked (e.g. when acquiring a lock).
+
+Our approach is to treat the execution of each procedure as a
+transoct/on: a sequence of actions that occurs to com01etion or not at
+all. Objects can issue calls to one another, hence t h ~ transactions
+ask nested in the sense of [Moss]. One way to understand the modal
+is to vis,mli~e each procedure as executing within a scope dafined by
+its caller. Activities outside this scope are permitted to see only the
+object state before or after the procedure completes, never while it is
+taking place. As a convenience to the programmer, any procedure can
+terminate by executing an abort statement, which causes all its effects
+to be erased.
+Formally, a transaction is a sequence of one or more operations:
+local computations or remote procedure calls, which execute as subtramact/ons. A transaction terminates by execnting a commit or
+3bort. Commit is implidt when a procedure returns normally, and
+makes the effects of a top-level transaction visible to otlmr trausaotions, and those of a subtransaction visible to its riblings. Abort must
+be explicit, and restores the state that existed prior to execution of
+the transaction or subtransaction. Committed transactions must be
+serializable: a total order on them should exist stmh that the state of
+the system is equivalent to the one that would result if these t r a n s i tions were executed sequentially in that order [Papadimitrios] [Gray].
+Thus, although interleaved executiom are permitted, they must produce the same effect as some non-interleaved execution would have
+produced.
+A purely transactional model would result in inefficiencies. For
+example, if a ride-effect of inserting an item into a data structure is
+to initiate garbage collection, and an insertion is subsequently
+aborted, "the garbage is reinstalled. In ISIS, the programmer can
+avoid this problem by explidfly specifying that an operation should
+execute as a top-level transactlon, as if it had been invoked by an
+
+6. Toplevel. The statement is executed as a topdevel transaction.
+Non-resilient clients interact with resilient objects through an
+interface that resembles the one used by objects to communicate with
+one another, by issuing RPC calls to objects on which they hold or
+can obtain a capability (the "name space" has a well-known capability). Each call executes as a top-level transaction. A client can also
+issue a series of requests as a transaction, first calling BEGIN, and
+later COMMIT or ABORT when the outcome is determined.
+The abort mechanism described above is interrml -- it is expli• dfly executed by a procedure that has detected some exception condition. Also needed is a way to terminate a transaction from the outride, e.g. if a deadlock occurs or an operator interrupts a computation
+for some other reason. ISIS supports a software kill signM, which can
+be issued by a client process and cannot be caught or ignored. Assodated with each transaction is a unique transaction-id (TID). The Idli
+'primitive takes a ' l i D as its argument and terminates the corresponding transaction by halting it and its subtransactions, and then fordng
+them to abort. Additionally, if a non-resilient client fails while e x ~
+curing a transaction, a kill is automatically performed on its behalf.
+
+Any system that can be forced to abort must avoid irreverrihle
+aedom, like inaccurate movement of a mechanical arm. In ISIS, this
+is not a problem because the system only invokes ki//if a deadlock is
+detected -- thus, a deadlock-free application will never be killed (for
+example, one that acquires locks in some predetermined order). Our
+approach is more flexible than that of systems which, abort
+transactions that executed at a rite which subsequently failed. Thus,
+whereas an ISIS application could be designed to move a mechanical
+arm while monitoring and reacting to sensor feedback, in many otber
+systems, this would not be possible: since the arm motion cannot be
+exactly reversed, to avoid aborts they must defer it until the top-levea
+commit.
+
+extermd caller (this feature was proposed in [Liskov-b]).
+
+3. ObJea spedaeaeou ~
+
+=nd system Intertme
+
+The resilient types are abstract types [Liskov-a] satisfying the
+properties listed above. Each resilient object instantiates a resilient
+type, and is accessible to holders of a capab///ty on it; these are open
+in that they can be freely copied or stored. Resilient type specifications have the following parts:
+1. Declarations for the resilient data encapsulated by the type, conrisfing of one or more indefinite-length arrays or heaps3 of resilient records.
+
+3Sequentially allocated data structures tend to have "hot spots" which are frequemly accessed, reducing potential concurrency[Garwick]. The heap management
+facility is used to dynamicallyallcr.ate and deallocate resilient rec.~ds from within
+transactions, avoidinga commonsource of hot-spots.
+
+80
+
+tion to the updates they perform on replicated data. When a coordinator finishes executing a request it broadcasts the result to its
+cohorts as well as to the caller. The cohorts retain copies of each
+result under the ' l i d of the transaction. Since the same TID is used
+during restart, they can fred and return a copy of the retained result,
+or, if none is found, reject the request, which will then be reissued in
+normal mode. Retained results are discarded when the parent of a
+subtransaction commits or aborts, retaining its own result, or when
+the top-level commits (results of actions in a top-level statement must
+be retained). Note that if a resilient object takes external actions,
+like moving a robot arm, the device must provide a function
+equivalent to retained results -- for example, a way to determine the
+command it last executed.
+
+The ISIS system is itself controlled by a commend language. At
+start-up, each site reads an initialization f'de containing configuration
+information. Subsequently, reconfiguration end other commands can
+be issued interactively.
+
+4. Runtime Issum
+4.1. Fault-tolerant execution of a reqm~t
+A task refers to the physical execution of a request by one of
+the components of a resilient object, designated the coordinator.
+Components are identical: eny can be coordinator for eny request,
+which tends to distribute processing load. The components that are
+passive for a request are designated as cohorts and serve as backups -one takes over if the coordinator fails. A task must satisfy the properfies enumerated in Sec. 2.2 to produce a correct logical execution.
+We now consider these properties individually.
+
+While restarting, it is not enough for the new coordinator to
+determine the results returned by operations that were previously
+executed. The serialization order must also be the same as was used
+before the failure -- otherwise, the values read from local data items
+by the new coordinator might differ from those read by the previous
+one, again leading to inconsistencies. ISIS addresses this issue by
+replicating both read end write locks, so that after a failure the new
+coordinator holds all the locks acquired by the previous coordinator'
+before it failed. The approach is to piggyback read lockin8 informa-:
+tion on other messages that could depend on their existence -- RPC
+requests end updates issued subsequent to the acquisition of the lock.
+Then, if any "evidence" to the existence of the lock survives a crash,
+in the form of an RPC or update that was not wiped ore, the locking
+information needed to ensure consistent restarf actions survives as
+well. After the crash, this information is forwarded to the new
+coordinator, which registers it before granting eny pending write-lock
+requests. If all the evidence pertaining to a read-lock is lost, actions
+inconsistent with that lock might occur during restart -- but this is
+acceptable, since data stored at the failed site are discarded during
+recovery, and the actions taken by the operational part of the system
+will thus be self-consistent (but see also the discussion of flush in Sec.
+4.3.4).
+
+4.1.1. Consistency
+Consistency is a question of event orderings: an acy~c ordering
+must be established between conflicting events end enforced during
+
+execution. To ensure that this is the case, each object implements a
+concurrency control algorithm [Bernstein]. It is difficult to automatically infer a good concurrency control method from an object specification. Therefore, ISIS requires that the progzammer provide a
+single-site concurrency control algorithm, which it transforms into a
+distributed one. ISIS provides flexible support for constructing lockbased algorithms, of which 2-phase locking is the best known end
+easiest to code. Two lock classes are supported; within each class,
+read, promotable read, "previous committed version" read, end write
+locks can be requested. The classes are:
+1. Nested 2-phase locks. When a subtrensaction commits, the lock is
+retained by its parent transaction [Moss]; when the top-level commits, it is released.
+2. Local 2-phase locks. When the transaction or subtransaction holding the lock commits, it is released.
+Once an ordering between events is established, it is important
+to respect it without employing excessive synchronization. As will be
+seen shortly, the ISIS communication primitives can provide high levels of concurrency while respecting exactly the message delivery orderings needed to execute a distributed computation correctly.
+
+4.1.4. Recovery
+If a partial failure occurs, a failed component can recover by
+discarding its old state and copying the current state from some
+operational component. In effect, the components of an object act at
+dynamic backups, eliminatin8 the need for stable (disk) storage. We
+will show that the communication primitives ensure that recovery is
+serialized with respect to other operatiom.
+
+4.1.2. Availability
+Availability is satisfied by replicating the code end data for each
+resilient object. Since data accesses are transactional, each item is
+represented as a stack of versions [Moss], replicated at k+ 1 or more
+sites. A read-eny copy, write-all (operational) copies rule is used
+when locldng or accessing replicated data. An item is updated by
+pnshin8 a new version on all copies of the corresponding stack, or
+replacing the top-most version if one already exists for the transaction
+doing the update. Abort is implemented by popping the top version,
+and commit by pepping the top two and then pushing the first again.
+
+One way to implement total recovery is to save checlqmints and
+committed versions of the object data on stable storage. When the
+components that failed last have recovered [Skeen], they resume
+operation from their stable stores; other components use the partial
+recovery method. However, this approach is costly. A preferable
+alternative is to restart from total failure in the initial state and then
+to reload the objects from application-level backups end logs. ISIS
+provides a log facility that can save RPC requests for subsequent
+replay. If a transaction aborts, its log entries are deleted. This permrs each application to implement a low-cost recovery method of its
+
+4.1.3. Progresa
+
+OWn.
+
+ISIS ensures that operations progsess to completion using a
+checkpoint-restart scheme [Birrmm-a]. Each RPC is broad_~_3t to the
+operational components of an object, end constitutes a chectpoint. If
+the coordinator fails while executing the request, one of its cohorts
+takes over as the coordinator. It restores its copy of the object to the
+state at the time of the checkpoint, discarding versions of data items
+that were written by the transaction being restarted (this requires no
+communication with other components or objects). The actions of
+the failed coordinator are then repeated in restart mode. When the
+coordinator issues a call in restart mode that does not repeat some
+F:ior call issued by the failed coordinator, the called ohject detects
+this (see below) end rejects the request. Normal execution then
+resumes and the call is reissued.
+
+4.2. The communication subsystem
+We now turn to implementation issues, end particularly the way
+in which the above techniques can be expressed using a small set of
+communication primitives [Birman-b]. For brevity, protocols and
+correctness proofs are not included here.
+ISIS employs a communication subsystem providing three types
+of broadcast protocol for transmitting a message reliably from a
+sender prtxess to some set of destinations. The protocols are atomic
+in an "all or nothing" sense: if any destination receives a message;
+then unless it fails, all destinations will receive4 it.
+
+When the new coordinator reissues en operation during restart,
+it should not be re-executed -- otherwise, the system state could
+become inconsistent (i.e. if an increment is performed twice). To
+avoid this, the results returned by operations are replicated in addi-
+
+'Reception can be indirect. If process t receives a messagera from processs,
+and s subsequentlyfails, than the state of t may depend cm messagesreceivedby s
+before it,sent ra. Therefore,unless t failsas well.those messages must be delivered
+to theirremaining destinations.
+
+81
+
+capability management facility translates the capability into a list of
+process addresses for transmission~. The caller then waits for a reply.
+Upon receiving the RPC, a component must determine ff it is
+the new coordinator. All components of each object are statically
+ordered by site number into a ring. A component computes its rank/n& as the distance along the ring from the site where the ~
+ofigilmted; the coordinator is deemed to b¢ the lowest ranked opera-
+
+The BCAST primitive
+It is often desired that if two broadcasts are received in some
+order at a common destination site, they be received in that order at
+all other common destinations, even if this order was not predetermined. For example, some parts of 1SI$ maintain replicated lists by
+ensuring that insertions and deletions occur in the same order at each
+copy.
+This behavior is obtained using the primitive
+BCAST(msg, label, dests), where msg is the message and /abel is a
+string of characters. Two BCAST's having the same label are ordered
+in the same way at all common destinations. A BCAST having the
+label " ' is ordered with respect to all other BCAST's.
+
+tional component.
+
+This tends to place the coordinator at the smile
+
+site as the originator, which is desirable because it m,rlmizes the
+potential degree of asynchrony between the comlxments at a site and
+their cohorts. The new coordinator returns a retained result if one is
+found. Otherwise, it executes the new request and OBCAST's the
+result to the caller and its cohorts. A cohort watches the coordinator
+for failure, which it detects by reception of a GBCAST message, and
+then recoraputes the ranking. Since all COmlxments have the same
+view when an RPC is received, and all subsequently see the same
+sequence of failures and recoveries, the conclusions reached by components are consistent. Note that all necessary synchronization is
+provided by the communication primitives.
+
+The OBCAST primitive
+If a computation transmits multiple messages to a single destination, they should be prcx:essed in the order they were sent. The
+ordered broadcast primitive, OBCAST(msg, ts, dests), respects such
+"prespedfied" delivery orderings. Here, ts is a t i m e s t m p that can be
+compared with other timestamps. OBCAST ensures that bro~dca*ts
+are received at overlapping destinations in the order prescribed by
+their timestamps (if the destinations do not overlap, deliveryorder is
+unconstrained). OBCAST is the source of most concurrency in 1S15:
+although the delivery ordering is assured, transmission can be delayed
+to take advantage of piggybacking. Since many ISIS messages are
+small and local computing continues in parallel with the OBCAST, the
+resulting speedup can be dramatic. A scheduling algorithm is being
+designed to optimize transmission dedsiom.
+TImestamps are generated by incrementing a local counter for
+each broadcast. The counter is also changed to be larger than any
+fimestarnp received in a message. Thus, if one broadc'~t could have
+affected a second broadcast, the timestamp of the first will be smaller
+than the timestamp of the second [Lamport]. Note that tiraestamps
+generated by unrelated processes are comparable, hence it might
+seem that OBCAST is being asked to respect spedous orderings. In
+[Birman-b], we give a OBcAgr implementation that respects only
+those orderings that could arise in a resilient computation.
+
+Now, consider task termination. For each task, a capabilitylift
+(CLIST) is maintained, containing the capabilitiesof objects whose
+components should be informed when the task commits or aborts.
+The coordinatoruses OBCAST to send a commit or abort message to
+the objects in the CLIST. A CLIST is initiallyempty; a capabilityis
+added when an R P C is issued to an object. Additionally,when a
+reply is received from a committed subtransaction,the CLIST for
+that subtransactionis piggybacked on the reply and merged with that
+of the caller (unless the subtransaction executed in a toplevd statement, in which case its CLIST is discarded when it commits).
+On reception, a commit or abort message for transaction T is
+delayed if some subtransaction of T is still active (a subtransacfion
+can reply to its cailer before issuing its own commit or abort, hence
+the parent's commit could arrive before the child's computation is finished). After all subtramactions have terminated, retained results
+corresponding to T are deleted, and 'the local lock manaSer
+version-stack managers are informed of the event. When a ~ is
+received by a coordinator for a task, it waits until restart is completed
+(to ensure that the C L I ~ is accurate), forwards the signal to any
+active sub~ansactions, and then initiates an abort.
+
+The GBCAST primitive
+
+The basic characteristic of a coordinator-cohort computation is
+that the cohorts monitor the coordinator for failure. To capture this,
+we will say that the operational components of an object form a process group. The third broadcast primitive, denoted GBCAST,
+transmits information about failures and recoveries to process group
+members. A recovering component uses GBCAST to join the operational ones; when a component fails, some other component issues a
+failure GBCAST on its behalf.
+Our GBCAST protocol ensures that GBCAST events are totally
+ordered with respect to OBCAST and BCAST events, and that when a
+failure occurs, the corresponding GBCAST is delivered after any other
+broadcasts from the failed process. Each component can therefore
+maintain a v/ew listing the membership of the process group, updating it when a GBCAST is received. The ordering property then
+implies that although components do not receive broadcast simultaneously (in wail-dock time), they do receive each message in the same
+view. This lead us to formulate algorithms implementing the techniques described earlier in terms of/og/ca/orderings that the protocols can implement, rather than expiidt synchronization. A result is
+that it remains easy to establish the correctness of the algorithms
+despite concurrency in the communication layer.
+
+4.3.2. ]Recovery It-ore paraal Mlurm
+To initiate recovery, a component issues a GBCAST to the
+operational components of the object to which it belongs. When this
+message is received, any component transfers its state to the recovering one: since the state o f the operational components are detarnfined
+by the messages they have received, and each has received the same
+set of messages, all are in the same state. Note that all the n__~_,=ary
+synchronization is provided by the GBCAST primitive.
+
+4.3.3. M=nIslng replicated Iodm
+The locking methods discussed earlier are easily realized using
+our broadcast primitives. A read-lock is first obtained locally by the
+coordinator of a computation. Then, a read lock resistration me~,.~e
+is OBCAST to the other copies of the data item. The coordinator
+immediately continues execution, as if its read-lock were already
+replicated, although the message may not actually have been
+delivered anywhere. If the coordinator fails and any process has
+received a message m sent after the lock acquisition, the read-lock
+will be registered before the failure is "detected" by the cohorts
+managing other copies of the lock. This follows because the readlock registration precedes m and hence must be delivered despite the
+failure, whereas (by definition) the GBCAST fonows m and hence
+must occur after the lock registration. Because there is no urgency to
+send a read-lock registration message, piggybacking is particularly
+cost-effective (hence the description of Sec. 4.1.3).
+
+4.3. Fault-tolerant Implementation of selected operations
+4.3.1. RPC calls and reception; commit ~ Ilbort
+To issue an RPC, a task first generates a transaction id under
+which the execution will occur. If a non-resilient process is performing the RPC, a new top-level transaction is created and a unique identifier is assigned as its 'riD. If a task with TID • does a series of
+RPC's, 'liD's for the resulting subtransactions are formed by extending • with an index: x.l, •.2, etc. Finally, if a toplevel statement is
+executed, a 'liD is generated as for a subtransaction but the prefix is
+flagged as a top-level event. Having determined the 'riD, the culler
+OBCAST's the RPC to the components of the destination object. A
+
+5An inexpensive~otccot for rnaintaimng a cachec~ group addressinginforma6on, and to update h if it is found to be ~ t of date during messagetrans~s~ien, is
+
+given in Dirman-b].
+
+82
+
+objects that take irreversible actions. However, better performance
+can sometimes be obtained using an optim~tic locking algorithm
+together with delayed updating. Write-locks are acquired locally by
+the coordinator, which queues update messages but does not transmit
+them. When the transaction is prepared to commit, it attempts to
+acquire these write locks from its cohorts aad aborts (discarding its
+queued updates) if deadlock would result. Otherwise, it trmxsmits th¢
+updates using OBCAST.
+
+Unlike a read-lock, a write-lock must be granted explidfly by all
+components of an obj~t, cxctpt in certain special cases~ described in
+[Raeuchle]. Moreover, a write-lock request can be performed
+correctly whether or not other broadcasts issued by the computation
+have been delivered, hence the request is not subject to the OBCAST
+type of ordering constraint. On the other hand, if two writedock
+requests on the same date item are issued concurrently, they could
+deadlock by being granted in different orders at different sites. This
+is just the type of ordering problem addressed by BC,,LST. To acqulre~
+a write-lock, the request is BCAST using the identifier of the data
+item as a label. If a component fails during the protocol, the partially
+acquired write-lock is withdrawn and then re-reqLu~sted. Since the
+read-lock registration message preceded the GBCAST announcing the
+failure, either it is delivered before the GBCAST, or no site has
+received a message sent by the process after it obtained the lock.
+The write-lock is re-reqtmsted after the GBCAST message is received,
+so it will be forced to wait on the read-lock if evidence that the transaction held a read lock survives the crash (in the form of some
+action it took that reflects the data it read). Moreover, since BCAST
+is delivered in the same order everywhere~ concurrent write-lock
+requests will not &adlock.
+
+Using delayed updates, the possibility of an occasional abort is
+accepted as an alternative to issuing multiple write-lock requests -only a single locking action is n~dad, and it occurs at tim end of tim
+transaction. Moreover, other transactions can read old versions of
+any data items being updated (but only at remote sites) and multiple
+updates could be sent in each message. These benefits have a cosP.
+large amounts of buffering may be needed to support the techaique,
+and irreversible actions are precluded. 'l~e ISIS prototype will be
+used to compare delayed and concurrent update in the future.
+
+5. System architecture
+5.1. Communication primitives
+A detailed discussion of the communication subsystem is given
+in [Birman-b]; we now summarize its archittmure briefly. The primitives are build in layers, starting with a "bare" network providing
+unreliable datagrams. A site-to-site acknowledgement protocol converts this into a sequenced, error-free message abstraction, using
+timeouts to detect apparent failures. An agreement protocol is then
+used to convert the site-failures and recoveries into an agreed upon
+ordering of events. If timeouts cause a failure to be detected erroneously, the protocol forces the affected site to undergo recovery.
+
+,4.3.,4. Updattug r t ~ : a t a d data
+Read operations are satisfied from the version stack for the
+local copy of the data item bein8 accessed. Three implementafiom
+are supported for write operations.
+Synchronem eWhae.
+For this method, OBCA~T is used to transmit the new value to
+all operational compommts. The coordinator then waits for acknowiedgermat that the operatiom have hi=n completed (or a fmlure
+occurs, as signa/]ed by arrival of a GBCAST).
+
+Built on this is a layer that supports the various primitives.
+BCAST employs a two-phase protocol based on one by Skeon [Skeenb]. OBCAST has a very light-weight implementation, based on the
+idea of flooding the system with copies of a message: Each process
+buffers copies of the messages needed to ensure the consistency of its
+view of the system. If message m is delivered to process p, and some
+message m' precedes m, a copy is sent to p as well (duplicates are
+discarded). A garbage collection phase deletes superfluous copies
+after a message has reached all its destinations. By using extensive
+piggybacking and a simple scheduling algorithm to control message
+transmission, the cost of an OBCA3T is kept low -- often, less than
+one packet per destination. GBCAST is implemented using a twophase protocol similar to the one for BCAST, but with an additional
+mechanism that flushes messages from a failed process before delivering the GBCAST announcing the failure. More details and correctness
+proofs appear in [Birrnan-b].
+
+Comurrent update.
+Although syn~ronom update is conceptually .timrle, costly
+delays are incurred while waiting for acknowledgements. Usin$ concurrent upda:e, data are updated locally by the coordinator, which
+uses OBCAST to inform its cohorts without waiting for acknowledgments [Joseph-hi. Recall that OBCAST is also used to commit, which
+releases locks. Since the updates precede the commit and OBCAST
+respects this ordering, any process that obtains a lock will observe the
+correct version of any data it reads. Thus, the semantics of the syndtronous update are preserved but, if few write-locks are needed, the
+response time is limited by the/oca/execution speed of the requestl
+To preserve the consistency constraint on executions, two additional issues must be addressed. First, when a top-level transaction
+that has done updates is ready to reply to its caller, the reply must be
+delayed until all cemponents have received the initial RPC -- otherwise, a failure could cause the R.PC and all the updates it generated
+to be lost, invalidating the result returned to the caller. ISIS is able
+to satisfy this constraint without introducing any overhead. Similarly,
+if an object using concurrent ulxla~ performs actions with external
+sida-effects, a failure could erase any pending concurrent updates
+together with any assodated read-lock information, although the
+external actions that depended on this information would persist.
+Then, during restart, although the actions of the object would be
+internally consistent, they might be inconsistent with the externany
+observed behavior of the system before it failed. For such cases, a
+flush primitive is provided, which the object calls before taking any
+external actions. Hush blocks until all pending updates have been
+delivered.
+
+5.2. lllgher level system structure
+ISIS is best viewed as an adjunct to a conventional operating
+system, providing persistent fault-tolerant services which complement
+conventional fault-intolerant programming support. Our prototype
+was built under 4.2 UNIX. Performance is limited primarily by
+UNIX overhead, and is reported in the next section.
+The system is organized hierardfically, as illustrated in Fig. 1.
+The lowest level of ISIS provides the communication primitives
+described earlier, together with a a message editing subsystem supporting variable format messages with symbolically named messagefields. Built on top of this is the a layer supporting concurrent tasks,
+monitors for mutual exdusinn [Lampson], the tr&maedonal version
+stack, and the lock manager. These are used by the implementatiom
+of the algorithms of Sec. 4. A number of system services are implemented as resilient objects: the capability manager [Dietrich], which
+maps a capability on an object to a list of sites where its components
+reside, the name-space, which maps symbolic names to capabilities,
+and the interface used by external non-resilient processes to issue
+requests to resilient objects.
+In UNIX, processes and inter-process communication are expensive. Consequently, a single system process handles functions common to all resilient objects, and a single "type manager" is used for
+each resilient type. A type manager multiplexes its time between the
+different instances of its type residing at the site where it is executing;
+
+Delayed updat~
+The concurrent ulxlate scheme assumes a pessimistic write.
+locking algorithm, which waits for responses from all operational
+components each time a write-lock is needed. Pessimistic locking permits the programmer to design a deadlock-free object (by acquiring
+write-locks in a predetermined order), and hence to implement
+Wl'hemost i,hl:~C~-~antof these is that, since ¢o~'dinatctsfor a singletransaction
+are run at the same site, after a tzamactionhas acquireda distributedwriteqockon
+m item x, its sub-transaetlomcan do Locallocking on x using the sameregis~ation
+techniqueas was describedfc~ read-locks.
+
+83
+
+Object Specification I[
+Language
+I
+~a~_
+
+High-levelFaultTolerantservices
+
+~me~pact [ ~ e
+
+User-Defined
+Object Types Objectlayer
+T0, T~....
+
+Object create,delete. RPC's,lock acqoistion,
+read / replicatedwrite, commit / abort, kill
+O~AS~
+
+I
+
+-MET
+
+Fault-tolerant
+Irnplementat/on
+
+GBC~BroadcastPrimitive$
+
+....... tional
+LJ ' ~ ' ~ ] II~I°;~-;;r III Trec°'da''°c
+
+I Site-SiteCommunication I
+
+with the number of destinations. The throughput figures indicate that
+substantial system loads could be accommodated.
+Turning to the resilient objects themselves, note the dramatic
+performanca improveraent performance achieved when using concurrent update. These tests measured the average cost per operation
+for a transaction doing 25 operations of the designated type. Concurrency control overhead is higher for the first operation than for
+subsequent ones, which the system recognizes as being "covered" by
+previously acquired locks. The amortized cost is therefore low, permitring rates of 10-12 operations per-second even when updating was
+being done (again, assuming an otherwise idle system). The fact that
+concurrent update does better than synchronous update even in the
+singie-site case is because concurrent update is also used to maintain
+message routing tables in the type managers. Note that nesting does
+not introduce any substantial overhead. Within the system, mint
+time is spent sending and receiving messages and in the object itself,
+executing the requested operation.
+The main observation to draw from the above is that when
+using concurrent update, the performance of a resilient object acce~.
+bie from multiple sites is not far from that of a fault-intolerant
+single-site object of the same type (the ISIS figures in the latter case
+are in line with those reported for other systems supporting nonreplicated objects). Moreover, overall performan~ will be much
+higher in read-intensive settings, provided that requests arrive randomly at the different components, since reads can be done locally by
+any component. Thus, ISIS is able to provide powerful dgstributed
+services at suprisingly low cost -- at worst, a k-redh'ent object per.
+forms nearly as well as a single-site instantiation of the underlying
+abstract type, and at best its overall performance could exceed that of
+a single-site object by a factor of k + l . Althou~ that this is not
+suprising, in view of the way that concurrent update works, it is ce~.
+tainly encouraging. If an effort were made to tune the ISIS prototype
+and the objects themselves, performance could probably be doubled.
+under UNIX, and further improved by moving to a more streamlined
+operating system.
+
+Presentation
+Layer
+
+/]ut.itie,
+Low-levelFacilities
+
+[ TCP/IPPacketTransport I
+Figure 1: ISiSSYSTEMARCHITECTURE
+these in turn multiplex their time among currently active tasks. Process creation occurs only when a new type manager must be started
+(this idea was suggested in [Lazowska].) Commands to interactively
+load and unload type managers (e.g. when a new type is defined) are
+provided by the system process.
+6. Performance of the prototype
+
+A prototype of ISIS has been operational since January 1985.
+Performance is reported for a duster of SUN 2/50 workstations interconnected by a 10-Mbit etheruet (Table 1). Our approach was to
+evaluate the performance of the ~mlmunlcation primitives, and then
+to measure the response time for some simple resilient objects. The
+indexed sequential file, built from a resilient directory and a resilient
+file, illustrates the overhead assodated with neslin8.
+Although our figures are for lightly loaded ISIS systems, the
+multi-process structure of the system still incurred substantial scheduling and interprocess communication overhead. Also, the perform a r t s of IPC co~ectious is suboptimal, primarily because the SUN
+version of UNIX does not yet support changes to the IFC buffer size.
+The first set of figures addresses performance of the version
+store and lock manager. These show that while the version store is
+very fast in its in-core partial recovery mode, it degrades in the disk.
+based "stable" storage mode. This argues in favor of log-based
+recovery from total failures (the default), since stable storage is
+thereby avoided.
+
+7. Future research
+
+The ISIS project is now entering its tlfird year. Two major
+problems are receiving attention: intercounection of 1515 dusters and
+the resulting partitionin8 issues, and an investigation of the limits of
+concurrency in systerus subject to ordering-based correctness constraints [Joseph]. On a more pragmatic level, we are examining uses
+for ISIS in hlgh-level programming tools, which might constitute the
+interface to a new generation of operating system services. Also
+being studied are facilities for dealing with real-time events, replicated processing (as opposed to replicated data), arid demand-based
+data migration within k-resilient objects replicated at more than k + l
+sites. We would also like to build some sort of application system
+using ISIS as its base, for example a critical care system for medical
+environments [Binnan-c]. F'mally, we confront the problem of
+integrating ISIS more fully into an operating system. ISIS provides a
+type of service and exhibits a collection of support requirements
+which are very different from those seen in other distributed systems.
+Design of an operating system that is good at providing both conventional and fault-tolerant services thus remains an open problem.
+
+The broadcast primitives are dominated by underlyin8
+message-passing costs, but otherwise depe~Id primarily on the number
+of phases required. In the initial implementation of the primitives,
+all run in two phases (although the message is delivered during the
+first one for OBCAST and the second for GBCAST), hence all the
+primitives give similar performance. The/mency figure measures the
+time from message transmission to remote delivery. Turnaround
+measures the delay from transmission to reception of a reply from
+the remote task that received the message, and throughput measures
+the rate at which a single task can issue broadcasts without waiting
+for acknowledgements, in messages per second. The effective
+throughput is 3 to 5 times higher than this, because concurrent update
+permits multiple update messages to be piggybacked on a single
+packet (notice that the effective throughput decreases more slowly
+•than the true throughput as the number of sites increases: while waiting for acknowledgments, there is time to generate more amcorrent
+update messages, hence the degree of piggybacking rises). We also
+measured the system throughput, which is the maximum number of
+BCAST or OBCAST protocols that can be started per second at a site
+in a steady state (this figure could be improved by tuning the UNIX
+scheduling policy). Note that the cost of the protocols rises linearly
+
+8. Conclusions
+
+This paper presented an overview of the ISIS project and
+reviewed the techniques it uses to obtain fault-tolerant implementations from abstract type specifications. The go6d perforraazme of a
+prototype supports our belief that the approach will be viable in
+diverse situations. Moreover, a novel communication architecture
+leads to a simple system structure within which correctness arguments
+are straightforward despite the preseuse of failures and concurrency.
+We believe that, along with other systems for fault-tolerant
+software development, ISIS represents the be~nning of a new generation of very high-level operating systems facilities. Much as virtual
+memory changed the engineering of very large systems in a funda.
+mental way, these facilities will fundamentally change the way that
+distributed software is developed, and will thereby eatable research in
+
+84
+
+COMPONENT TESTED
+Delay to reception
+Delay to reception
+Delay until task starts
+BEGIN / COMM1T
+BEGIN / READ / COMMIT
+BEGIN / WRITE / COMMIT
+BEGIN / C O M M I T
+/ READ / COMMIT
+
+GENERAL PERFORMANCE
+Site-to-site message
+Process-to-process message
+RPC to object, same site
+Version stack:
+(volatile)
+(stable)
+
+SUN 2/S0
+40ha
+10ms
+30ms
+19ms
+20ms
+23ms
+467ms
+493mt
+
+BEGIN~WRITE~COMMIT
+
+880ms
+
+Lock manager
+
+Acquire local lock
+
+Failure detector
+GBCAST
+
+Ttmeout
+
+0.7ha
+n.a.
+
+Delay until delivered
+
+n.a.
+
+7sees
+2sem
+
+7secs
+3secs
+
+Latency
+T u m a , ound
+Throughput (one task)
+Effective Throughput
+System Throughput
+Latency
+Turnaround
+SystemThroughlmt
+Delay to acquisition
+
+lalte
+10ha
+18ms
+10 / sec
+35 / sec
+> 100 / sec
+10ha
+20ms
+> 100/sec
+30ms
+
+3 altts
+49ms
+165na
+6 / sec
+24 / sec
+18 / see
+180ha
+180ha
+20/sec
+220ha
+
+6sRm
+60ms
+360rm
+3.5 / sec
+17 / sec
+10 / see
+240ms
+360ms
+12/sec
+400tin
+
+READ
+WRITE (syndlronous)
+WRITE (concurrent)
+BIND (synchronous)
+BIND (concurrent)
+LOOKUP (read only)
+PUSH (synchronous)
+PUSH (conctLrrent)
+POP (synchronous)
+POP (concurrent)
+INSERT (synchronom)
+INSERT (concurrent)
+LOOKUP
+
+13 / sec
+4.2 / sec
+12.5 / sec
+2.9 1 sec
+6.3 / sec
+11 / sec
+2.7 / sec
+9.2 / sec
+3.3 / sec
+9.2 / sec
+1.6 / sec
+3.8 / sec
+9.5 / sec
+
+11 / sec
+1.27 / sec
+11 / sec
+.9 1 sec
+6.3 / sec
+10 / sec
+I.I / sec
+9.3 / sec
+1.7 / sec
+10.5 / sec
+.52 / sec
+5. I sec
+9,5 / sec
+
+11 / sec
+,75 / sec
+9 / sec
+.57 1 sec
+5 / sec
+11 / sec
+.52 / sec
+9.6 / sec
+1.0 / sec
+8.9 / sec
+.3 / sec
+2.3 / sec
+9.5 / sec
+
+COMMUNICATION PRIMITIVES
+OBCAST
+
+BCAST
+
+Write lock
+RESILIENT OBJECTS*
+Resilient fde
+
+Resilient directory
+
+Resilient stack
+
+Indexed seq. file
+
+*Partial recovery mode.
+Table 1: Performance in the ISIS Prototype
+
+areas for whidt existing programming methodologies are inadequate,
+As the complexity and sheer" size of distributed systems continues to
+grow, facilities of this sort will be indispensable.
+
+[Bl.rman-cl
+
+llrrnan, K. eta/. M D D I : A new databasesystem for medical ap#ications. In Proc. IF.FEEConrputersand Cardlologg'(Sept.1994),309312.
+
+[mrrel]
+
+Birre~A., Nelson, B. In~lementing remote procedure cars. ACM
+TOCS 2, 1 (Feb 1984), 39-59.
+
+[eortl
+
+Borg, A. er. al. A message system supt.xa~n8fault-tolerance.Proc.
+9th SOSP, Bretron Woods, NH (OcL 1983), 90-99.
+Borr, A. Robustness to crash in a distributeddatabase:Anon-shared
+manxx'y multi-processorapproach. Tandem Computers, Inc.,1984.
+
+9. Acknewltdgemeat
+Wally Deitridh A m r El Abbadi, Tommy Joseph, Thomas
+Raeuchle, and Pat Stephenson all made many contributions to the
+work reported here. We are also grateful to Dale Skeen, who
+founded the project with us in 1981, and to Fred ~ ¢ i d e r for his
+careful reading of a prior version of this paper.
+
+t~orrl
+
+I0. lleCertmza
+
+[Cooperl
+
+Coc,per, E. Replicated distributedprograms. Ph.D. dissertation,
+Computer Science Department, Univ. of Califm'nia,Berkeley (May
+1985).
+
+CDietrichl
+
+Dietrich, W. Ph.D. dissertation, forthcoming.
+CCyawlick,D. Processing "hot SlXXS"in high pea'formancesystems.
+Amdahl Corp., Sunnyvale,1984.
+C~'ay, J. Notes on database operating systems. Lecturenotes in computer science 60, C.~x3dand I-Iaru'narmis,eds., Sprlnger-Verlag1978.
+Joseph, T. Ph.D. dissertation,forthcoming.
+Jcseph, T., Birman, K. Low cost managementof replicated data in
+fault-tolerant distributed systems. To appear, ACM TOC$.
+Lampson, B., Redell, D. Experiencewith processesand rnonitorsin
+MESA. CACM 23, 2 (Feb. 1980), 105-117.
+Lamport, L. Time, clocks, and the ordering of events in a distributed system. CACM 21, 7, July 1978, .558-565.
+
+[Gawlick]
+{Bartlml
+
+Bartlett, J. A NonStop Kernel Proc 8th $OSP, Dec. 1981.
+
+{aa'amin!
+
+Bermtein, P., Goodman, N. Concurrency control algorithms for
+rel:~icated datalmse systems. ACM Compuaa8 $urvO's 13, 2 (June
+1981), 185-222.
+B/rman, g., et. a/. Implemmting fault-tolerant distributedobjects.
+IEEE 78E-11, 6, (June 1985), 502-508.
+Eirman, "K., Joseph, T. Relialte coaxtaunicationin an unreliat~.e
+envlronramt. Deot. o~ Computor Science, Cornel1 Univ., TR 85694, Aug. 1985.
+
+[alrmaa-al
+[Blrmaa-bl
+
+[Grayl
+[Joseph-a]
+[Joseph-b]
+[Lampsonl
+~rnportl
+
+85
+
+[l,azowska]
+
+Laz~vska, E. er a/The architecture of the EDEN syster~ /'roe. &h
+SOSP, Dec. 1981, 148-159.
+
+[Llskav.al
+
+Liskov,B., Z~lles, S.N. Program~ng with abstracz data types.
+$IGPLAN~ttces 12, 2 (Apr. 1974), 50-59.
+Liskov,B., Scheifler, K t3uardiam and a~om: Linguistic sup~m
+f~" robust, distributed l:go~ams. ACM TOPlAS 5, 3 (July 1983),
+381-404.
+Moss, E. Nested u'ax~acziom: An ~
+to reliable, disuibuted
+computing. Ph.D. thesis, MIT Dept of EECS, TR 260, April 1981.
+
+[Llskov-bi
+[Mou]
+
+[Pspadimitrou] Papadin~trou, CC The seriaiizabiliry ~ cancurrenz database utx:l.ate~.
+JACM 7,6, 4 (OcL 1979), 631-653.
+[Pope.k]
+Popek, O. eta/. Locus: A network ~r&nspa~emt,high reliahility distributed systera. Proc. 8th SOS,a, Dec. 1981, 169-177.
+~..hle]
+Raeucble,T. Ph.D. dissertatim, forthcctaing.
+[schncltnltl Schlicfin8, R, Schneider, F. Falt-stqp processors: An approach to
+designing fault-tde~az~tt distributed c~xnlxt.ting systems. ACM FOCS
+I, 3, August 1983, 222-238.
+[$keen4]
+Skeen, D. Deterrc~ning the last process to fail. ACM 70CS 3, I,
+Feb, 1985, 15-30.
+[Skeea-b]
+Skeen, D. Areliable broadcast prtxcccL Unpublished.
+
+~6
+
+

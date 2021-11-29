@@ -1,0 +1,899 @@
+Agent Technology Applied to Adaptive Relay Setting for Multi-Terminal Lines
+D. V. Coury
+Member IEEE
+
+J. S. Thorp
+Fellow IEEE
+
+Dept of Electrical Eng.
+Escola de Engenharia de São Carlos
+University of São Paulo
+Brazil
+
+School of Electrical Engineering
+Cornell University
+Ithaca, NY 14853
+USA
+
+K. M. Hopkinson
+Student Member IEEE
+
+K. P. Birman
+ACM Fellow
+
+Department of Computer Science
+Cornell University
+Ithaca, NY 14853
+USA
+
+Abstract: This paper discusses the adaptation of the settings of
+distance relays for multi-terminal lines employing agents. Agents
+are software processes capable of searching for information in
+networks, interacting with pieces of equipment and performing
+tasks on behalf of their owners (relays). Results illustrating the
+performance of the adaptive method proposed compared to
+conventional fixed settings are presented. It is shown that the
+digital relays and agents acting within a communication structure
+(also called middleware) can alter adaptive settings to ensure
+correct performance over a wide variety of operation conditions,
+without the need of an additional communication link. The
+proposed relaying scheme can also be utilized for first zone
+clearing over the entire line.
+
+information in networks, interacting with pieces of
+equipment and performing tasks on behalf of their owners
+(relays). Moreover, they are autonomous and cooperative.
+Very few publications concerning the application of agents
+in the protection field have been reported in the literature.
+Tomita et al [8] proposed a cooperative protection system
+utilizing agents. Relay agents were constructed, and the
+cooperation of the main agents was simulated for primary,
+backup and adaptive protection.
+Results illustrating the improved performance of the
+adaptive method proposed compared to conventional fixed
+settings are presented in the following sections.
+
+Keywords: Distance Protection, Relaying, Three-terminal Lines,
+Agent Technology.
+
+II.AGENT TECHNOLOGY
+
+I.INTRODUCTION
+Transmission lines may be tapped to provide intermediate
+connections to loads, or to reinforce the underlying lower
+voltage network through a transformer and such a
+configuration is well known as a multi-terminal line [1].
+Protection of multi-terminal lines is not as simple as that
+of two-terminal lines. They usually experience additional
+problems caused by the intermediate infeed from the third
+terminal, an outfeed, different line lengths to the tee point,
+etc. The limitations of non-pilot distance relays for their
+protection have been acknowledged for decades. These
+limitations lead to the traditional distance relaying approach
+to experience severe underreach and overreach problems.
+The relay first zone reach may not even extend beyond the
+tee point in some underreach cases [2].
+Some approaches based on adaptive relaying were
+proposed to face such a situation and some fundamental
+concepts can be found in [3]. Horowitz et al [4] define
+adaptive relaying as a protection philosophy which permits
+and seeks to make adjustments to various protection
+functions in order to make them more attuned to prevailing
+power system conditions. An adaptive setting concept for
+two and three terminal lines, which can respond to changes
+in the network conditions, was proposed by Xia et al [5,6].
+Stedall et al [7] also proposed an investigation into the use of
+adaptive setting techniques for improved distance back-up
+protection.
+This paper discusses the adaptation of the settings of
+distance relays for multi-terminal lines employing agents.
+Agents are software processes capable of searching for
+
+A software agent is a computer program that takes
+independent action based on events in the surrounding
+environment [9]. Under control of some application that
+owns the agent, it is sent forth or placed at some site within a
+network where it takes local actions on behalf of its owners.
+Agents are dynamic entities. For example, an agent can
+exhibit dynamically changing behavior, receiving updated
+parameter settings from the owner or from other agents
+participating in the same application. An agent can also
+learn from the environment; the term “intelligent” is
+sometimes applied to such agents, particularly if the learning
+method involves artificial intelligence tools, or neural
+networks.
+Agents can be further subdivided based on their mobility.
+Mobile agents can literally travel from one location to
+another while maintaining their state and functionality. One
+imagines such an agent as moving through a network in
+search of certain data, or for locations having certain
+attributes. In contrast, local agents are placed by the owner
+and then remain in the same location throughout their
+computational lives. Both kinds of agents normally have the
+ability to communicate with one another making mobility a
+lesser benefit than it might appear at first glance.
+In the present paper, we consider the simplest kinds of
+agents: local, non-intelligent ones. Our work seeks to
+demonstrate advantages stemming from the rapid response
+time made possible by placing a computational task close to
+the point where an action or measurement is needed, and the
+simplicity of the power systems architecture afforded by the
+ability to send code to general purpose computing platforms.
+The basic idea is that by doing so, new control paradigms
+can be introduced and executed efficiently, without changing
+
+the basic computing architecture of the power systems
+network.
+The use of agents raises security considerations that go
+beyond those encountered in traditional software systems.
+Among the issues that need to be considered are the
+mechanism for installing agents and for communicating
+parameter updates to them, the means by which a computing
+platform or agent authenticates incoming messages, and the
+enforcement of agent resource restrictions, such as the use of
+scarce computational cycles or space in databases and file
+systems. Prior to deploying agents in mission-critical
+settings, one would need satisfying answers on all of these
+fronts. Preliminary work towards policies addressing these
+issues can be found in [11].
+III.THE PROPOSED COMMUNICATION STRUCTURE
+AND THE POWER SYSTEM STUDIED
+A. The communication structure (middleware)
+The computing infrastructure in which our agent
+community will operate is a subject of active speculation at
+the time of this writing. The existing power grid
+communication infrastructure is composed of a hodgepodge
+of equipment ranging from high-end fiber optic cables with
+large data bandwidth to crude systems with limited data
+transfer capabilities to nothing at all. Few utility
+communications lines are interconnected. However, this
+picture will change as utilities deploy ever more elaborate
+control mechanisms, demanding increasingly rich
+communication frameworks, steps that can easily be foreseen
+as part of the battle to improve operating efficiencies.
+The relay scheme proposed here has modest network
+resource requirements compared to what we believe will be
+available in the near future. It is expected that the need for
+greater communication will result in a Utility Intranet (UI)
+that would interconnect control areas and their dependent
+entities using a relatively high capacity network similar to
+the Internet but physically separate from it and dedicated to
+the power systems application. However, we caution that
+predictions of network bandwidth requirements and total
+network capacity can be deceptively reassuring. History has
+shown a tendency for networked applications to use all
+bandwidth made available to them.
+To evaluate the feasibility of employing agents and
+network communication in power-systems relay protection,
+we need to understand the reliability and latency
+requirements of the relays. By doing so, we can determine
+whether or not a proposed combination of network hardware
+and communication protocols can meet the protection
+system’s needs. Relays play a critical role in power grid
+operations with low tolerance for failures. One can identify
+that situations in communication between agents used for
+relay control might need to take place in as little as 10 ms, a
+latency realm leaving little time to recover from data
+
+transmission failures. It is therefore critical to ask whether
+available technology can meet those requirements.
+The future Utility Intranet will certainly be built from offthe-shelf Internet-based technology. To do otherwise would
+be unreasonably costly both in terms of initial construction
+costs and the concomitantly large maintenance requirements.
+Unfortunately, Internet routing hardware lacks any notion of
+service quality in network transmissions. Routers, as
+currently designed, drop packets when load rises and do so
+even before congestion occurs. This feature is intended to
+give the TCP (Transmission Control Protocol) a chance to
+reduce data rates before a router becomes completely
+overloaded and begins to drop packets. The approach makes
+sense for web browsers and email systems, but we need to
+ask what implication this behavior will have for power
+systems control. Within the Internet, all data delivery is
+executed on a "best-effort" basis without any possibility to
+raise the priority of one message over any other. In control
+applications, there are often situations where one needs to
+generate high priority events, and we should ask about the
+implications of running such applications over a network
+that lacks the corresponding capability.
+These points suggest that power systems may need
+guarantees of “Quality of Service” (QoS). Unfortunately,
+while QoS has been a very active research topic for many
+years, there is such deep disagreement over the right
+approach to take (stemming from cost implications
+associated with most proposals) that no single solution has
+gained market acceptance, nor are standard solutions likely
+in the near future.
+In order to face some of the network limitations,
+communication protocols like Cornell's Spinglass [12] have
+been developed. Spinglass allows the user to achieve high
+levels of reliability using protocols that probabilistically
+mask latency fluctuations and message loss. Spinglass could
+be optimized for use in power relaying and might form a
+powerful infrastructure for improved protection schemes.
+Underlying the study reported here is the idea that if we can
+simply understand the real needs of agent-based relay
+protection algorithms, we can identify areas of mismatch
+between these algorithms and the Internet and can then turn
+to Spinglass as a source of possible mechanisms to overcome
+the problematic network behavior.
+B. The three-ended system utilized
+In order to simulate the real system encountered in
+practice, this work makes use of a digital simulator of faulted
+transmission
+lines
+known
+as
+PSCAD/EMTDC
+(Electromagnetic Transients and Controls Simulation
+Engine)[13]. It should be mentioned that although the
+technique described is based on Computer Aided Design
+(CAD), practical considerations such as the Capacitor
+Voltage Transformer (CVT), Current Transformer (CT) and
+
+Terminal 1
+
+30km
+
+Terminal 2
+
+100 km
+
+100km
+
+~
+
+~
+1.0
+
+TTerminal 2
+
+o
+
+
+0.9
+
+o
+
+
+400 kV
+
+80km
+Terminal 3
+
+~
+
+1.0
+
+anti-aliasing filters on system fault data were also included
+in the simulation. A 400 kV system with tee configuration is
+shown in Fig. 1. The different line lengths are presented in
+the figure, as well as the voltage levels at the busbars. This
+work focuses on line-to-ground faults, since most faults in
+power system transmission lines are of this type.
+The protection system associated with this configuration
+was simulated for conventional non-pilot protection as well
+as a portion of the agent based relaying approach proposed.
+Digital distance relays with three zone quadrilateral
+characteristics located at terminals 1, 2 and 3 were
+simulated. DFT (Discrete Fourier Transform) routines were
+utilized in order to filter the faulted waves. Circuit breakers
+were associated with the relays in order to isolate the line in
+case of an internal fault.
+IV.AGENT RELAYS
+Fig.2 presents the agent mechanism for protection
+purposes. It can be initially divided into an adaptive pre-fault
+approach and a post-fault transfer trip action. The
+mechanism utilizes local agents at terminals 1, 2 and 3
+communicating with each other.
+A. Adaptive Pre-fault Approach
+The main purpose of the proposed agent mechanism is to
+carry out the adaptation of the settings of distance relays for
+multi-terminal lines in order to ensure correct performance
+over a wide variety of operation conditions.
+Initially, local agents for terminals 1, 2 and 3 can be
+defined as:
+(1) Operation Agent: This is a local agent, which monitors
+the operating condition at a terminal. The following
+parameters related to the system condition must be
+obtained
+from
+on-line
+measurements
+and/or
+calculations:
+Pre-fault busbar voltages
+Power transfer angles
+Source impedances
+
+The two local agents, shown in Fig.2, must communicate
+with the Coordination Agent, as defined in item 3.
+
+o
+
+
+Fig. 1 The three-ended system utilized for tests
+
+•
+•
+•
+
+(2) Breaker Status Agent: This local agent monitors
+changes in the system topology based on circuit breaker
+status.
+
+(3) Coordination Agent: The coordination agent collects
+information, makes decision, and disseminates
+information to the other two Coordination agents. The
+Coordination Agent at each terminal can then choose
+the correct relay characteristic, based on the information
+received.
+
+We propose that a group of settings be calculated off-line,
+and that these parameters be renewed from time to time as
+the system condition changes beyond a certain limit, based
+on the Coordination Agent information. Then, when a fault
+occurs the relay will operate close to its ideal characteristic.
+
+B. First Zone Transfer Trip
+This action takes place after the fault occurrence. In order
+to decrease the clearance time, when a fault is detected in the
+first zone of any of the relays located at the three terminals, a
+trip signal is sent through the communication network to the
+other two ends. A First Zone Local Agent coordinates the
+first zone transfer trip.
+The substation host computer executes the communication
+between local agents at different terminals, as described in
+the earlier section. It also receives relevant information in
+order to adapt local relays to the best characteristic available
+for the system operating condition. The new setting is then
+downloaded to the relay.
+
+C. Hierarchical Structure
+The hierarchical system for distance protection, based on
+agent technology, is shown in Fig. 3. Digital relays are the
+lowest level of this hierarchy. All the digital relays are
+linked to the substation host computer. This host acts as a
+data concentrator for all historical and oscillography records
+collected by the digital relays. It also has an interface to the
+station operators [14]. The substation host computer is
+finally connected to a communication network, as described
+in section III.A.
+
+is easily done within the agent framework. Similarly, new
+communication protocols or application-level additions such
+as data stream compression can be implemented in agents
+without affecting the other portions of agent operations. New
+tasks can be added seamlessly by adding new agents to a
+system rather than modifying existing code. Mobility is also
+an easy extension to agent operation, if it is required. In
+short, agents were designed to operate at a level of
+abstraction that is both appropriate and compatible with a
+dynamic system like the developing utility communications
+infrastructure when coupled with the expected growth of
+applications that take advantage of its potential.
+
+First
+Zone
+Agent
+
+COORDINATION
+
+AGENT
+
+Breaker
+Status
+
+Operation
+
+Agent
+
+Agent
+data
+
+V. RESULTS OBTAINED UTILIZING AGENT
+TECHNOLOGY – AN IMPROVEMENT
+
+request
+
+A. Adaptive Pre-fault Approach
+
+-INTERFACE WITH THE POWER SYSTEMConnection to the other two terminals
+
+Fig. 2 Agent mechanism in one terminal for protection purpose
+Communication
+Network
+
+Substation Host
+Computer
+
+Local
+Agents
+
+V,I
+
+V,I
+Digital
+Relay1
+
+Digital
+Relay2
+
+1
+
+CB
+
+CB
+
+Fig.3 Hierarchical System
+
+D. Discussion
+One issue that has not been raised up to this point is why
+agents are used in the proposed protection system rather than
+another means of signal processing and communication. We
+expect that a number of new applications will be developed
+to take advantage of the Utility Intranet’s potential. It is
+likely that new feature requirements will arise that were
+never anticipated. A flexible UI communication architecture
+based on open standards is the best insurance against a
+never-ending series of incompatible system updates. The
+integrated computation and communication, that are the
+defining characteristics of agent technology, form an
+excellent foundation for a general approach to power systems
+solutions utilizing a Utility Intranet. When one wishes to add
+intelligence or other characteristics to an agent operation, it
+
+Distance relaying techniques have attracted considerable
+attention for the protection of transmission lines. The
+principle of this technique measures the impedance at a
+fundamental frequency between the relay location and the
+fault point, thus determining if a fault is internal or external
+to a protection zone. The relationship between voltage and
+current is used for this purpose. This relationship is
+disturbed when there is infeed or outfeed. As mentioned
+earlier, this can make the relay experience severe underreach
+or overreach problems, especially considering non-pilot
+protection schemes for three terminal lines. Another
+situation that has to be taken into account is when the tap is
+not working for some reason. The setting of distance relays
+must reflect all the situations described earlier. Fig. 4(a)
+shows the typical non-pilot distance protection with different
+zones for a three terminal line at the condition represented
+in Fig. 1. As shown in the figure, only approximately 20
+from 210 km obtained instantaneous trip from the three ends
+of the lines in the case of an internal fault. Fig. 4(b)
+illustrates the improvement that can be found with the
+adaptive scheme utilizing Agents that is proposed in this
+work. The instantaneous trip area increased to
+approximately 67 km (more than three times the non-pilot
+condition) for the same situation. As mentioned before, the
+proposed adaptive scheme can alter settings to ensure better
+performance over a wide variety of operation conditions.
+B. First Zone Transfer Trip
+In order to highlight the efficiency of the proposed
+scheme, this section presents some tables comparing the
+clearance time for the conventional non-pilot protection as
+well as for the proposed scheme utilizing Agents.
+Table 1 presents the clearance time for the three-ended
+line shown in Fig. 1, considering a non-pilot protection.
+Line-to-ground faults are applied to different locations on
+leg 1-T, considering different fault inception angles and fault
+resistance of 10 ohms.
+
+Terminal 1
+
+Terminal 2
+
+T
+
+~
+
+~
+
+Z1
+Z2
+Z3
+
+20km
+
+Terminal 3
+
+~
+(a) Non-pilot protection
+Terminal 1
+
+Terminal 2
+
+T
+
+~
+
+~
+
+Z1
+Z2
+Z3
+
+67 km
+
+Terminal 3
+
+~
+(b)Agent Technology proposed – Adaptive pre-fault scheme
+Fig. 4 Distance relaying of a three ended transmission line
+Table 1 Clearance time for a three-ended line non-pilot protection,
+considering different fault locations on leg 1-T (100 km),
+different fault inception angles, line-to-ground fault and Rf =
+10 ohms.
+
+Dist.
+from
+1
+(km)
+
+Incep
+angle
+(o)
+
+10
+20
+30
+40
+50
+60
+70
+80
+90
+100
+
+0o
+0o
+0o
+0o
+90o
+90o
+90o
+90o
+45o
+45o
+
+average
+
+Terminal 1
+Z
+Cleao
+rance
+n
+Time
+e
+(sec.)
+Z1
+0.053
+Z1
+0.053
+Z1
+0.053
+Z1
+0.053
+Z1
+0.047
+Z1
+0.048
+Z1
+0.048
+Z1
+0.053
+Z1
+0.051
+Z1
+0.051
+0.051
+
+Terminal 2
+Z
+Cleao
+rance
+n
+Time
+e
+(sec.)
+Z2
+0.359
+Z2
+0.359
+Z2
+0.359
+Z2
+0.359
+Z2
+0.353
+Z2
+0.355
+Z2
+0.355
+Z1
+0.057
+Z1
+0.056
+Z1
+0.056
+0.2668
+
+Terminal 3
+Z
+Cleao
+rance
+n
+Time
+e
+(sec.)
+Z2
+0.354
+Z2
+0.354
+Z2
+0.354
+Z2
+0.354
+Z2
+0.353
+Z2
+0.350
+Z2
+0.348
+Z2
+0.354
+Z1
+0.055
+Z1
+0.054
+0.293
+
+Table 2 Clearance time for a three-ended line using Agent theory,
+considering different fault locations on leg 1-T (100 km),
+different fault inception angles, line-to-ground fault and Rf =
+10 ohms. Notice the dramatic improvements in protection
+zones relative to Table 1.
+Dist.
+from
+1
+(km)
+
+Incep
+angle
+(o)
+
+10
+20
+30
+40
+50
+60
+70
+80
+90
+100
+
+0o
+0o
+0o
+0o
+90o
+90o
+90o
+90o
+45o
+45o
+
+average
+
+Terminal 1
+Z
+Cleao
+rance
+n
+Time
+e
+(sec.)
+Z1
+0.053
+Z1
+0.053
+Z1
+0.053
+Z1
+0.053
+Z1
+0.048
+Z1
+0.048
+Z1
+0.049
+Z1
+0.059
+Z1
+0.05
+Z1
+0.051
+0.0517
+
+Terminal 2
+Z
+CleaO
+rance
+n
+Time
+e
+(sec.)
+Z2
+0.063
+Z2
+0.063
+Z1
+0.053
+Z1
+0.053
+Z1
+0.049
+Z1
+0.048
+Z1
+0.049
+Z1
+0.050
+Z1
+0.049
+Z1
+0.050
+0.0527
+
+Terminal 3
+Z
+Cleao
+rance
+n
+Time
+e
+(sec.)
+Z2 0.063
+Z2 0.063
+Z2 0.063
+Z2 0.063
+Z2 0.058
+Z2 0.058
+Z2 0.059
+Z1 0.059
+Z1 0.050
+Z1 0.050
+0.0586
+
+Table 2 shows the clearance time for the studied three
+ended line using Agent technology. The same situation
+concerning fault locations, fault inception angles and fault
+resistance is considered.
+It should be noted that an opening time of approximately
+three cycles for the circuit breaker utilized was considered. It
+isolates the fault by interrupting the current at or near a
+current zero. A coordination delay for zone two of the order
+of 0.3 s was also utilized.
+As mentioned before, in the proposed technology, when a
+fault is detected in the first zone of any of the relays located
+at the three terminals, a trip signal is sent through the
+communication network to the other two ends in order to
+isolate the fault. A transfer trip time of 10 ms is considered.
+A considerable decrease in clearance time considering the
+proposed scheme can be observed. This scheme is similar to
+a pilot relaying system utilizing a dedicated communication
+channel to produce tripping at all other terminals.
+VI. CONCLUSION
+An application of agents acting within a communication
+structure to adaptive relay settings for multi-terminal lines
+was presented in this paper. Results illustrating the
+performance of the new method proposed compared to
+conventional fixed settings were shown. The new approach
+based on agents was divided in an adaptive pre-fault
+approach and a post-fault transfer trip action. In order to test
+the proposed scheme, a digital simulation of a faulted
+transmission
+line
+was
+performed
+utilizing
+the
+PSCAD/EMTDC software. The protection system associated
+with this configuration was also simulated both for
+conventional non-pilot protection as well as for the Agent
+based relaying. The results showed that the new approach
+would alter adaptive settings to ensure correct performance
+over a wide variety of operation conditions, which is an
+improvement compared to fixed settings for the relays.
+Moreover, a considerable decrease in clearance time
+compared to conventional non-pilot protection was observed.
+It should then be emphasized that the new approach is not
+only a solution for a well-known problem, but also a very
+attractive alternative to improve the performance of
+protection systems in the new millennium.
+VII . ACKNOWLEDGMENTS
+The authors acknowledge the research support by
+subcontract No. 35352-6085 with Cornell University under
+WO 8333-04 from the Electric Power Institute and the U.S.
+Army Research Office as well as FAPESP (Fundação de
+Amparo à Pesquisa do Estado de São Paulo -Brazil).
+
+VIII. REFERENCES
+[1] S.H. Horowitz and A.G. Phadke, Power System Relaying, John Wiley and
+Sons, 1996.
+[2] IEEE Working Group, “Protection Aspects of Multi-terminal Lines”, IEEE
+Special Publication, 79 TH0056-2-PWR, 1979.
+[3] G.D. Rockefeller, C.L. Wagner, J.R. Linders, K.L. Hicks and D.T. Rizy,
+“Adaptive Transmission Relaying Concepts for Improved Performance”,
+IEEE Transactions on Power Delivery, Vol.3, no4, October 1988,
+pp.1446-58.
+[4] S.H. Horowitz, A.G. Phadke and J.S. Thorp, “Adaptive Transmission
+System Relaying”, IEEE Transactions on Power Delivery, Vol.3, no4,
+October 1988, pp.1436-45.
+[5] Y.Q. Xia, K.K. Li and A.K. David, “Adaptive Relay Setting for Stand
+Alone Digital Distance Protection”, IEEE Transactions on Power Delivery,
+Vol.9, no 1, January 1994, pp. 480- 91.
+[6] Y.Q. Xia, A.K. David and K.K. Li, “High-Resistance Faults on a MultiTerminal Line: Analysis, Simulated Studies and an Adaptive Distance
+Relaying Scheme”, IEEE Transactions on Power Delivery, Vol.9, no 1,
+January 1994, pp. 492- 500.
+[7] B. Stedall, P. Moore, A. Johns, J. Goody and M. Burt “An Investigation
+into the use of Adaptive Setting Techniques for Improved Distance Backup Protection”, IEEE Transactions on Power Delivery, Vol.11, no 2, April
+1996, pp. 757- 62.
+[8] Y. Tomita, C. Fukui, H. Kudo, J. Koda, K. Yabe, “A Cooperative
+Protection System with an Agent Model”, IEEE Transactions on Power
+Delivery, Vol.13, no 4, October 1998, pp. 1060- 66.
+[9] M. Genesereth and S. Ketchpel, "Software Agents", Communications of the
+ACM, Vol. 37, n. 7, July 1994, pp. 48-52, 147.
+[10] C. Heckman and J.O. Wobbrock, "Liability for Autonomous Agent
+Design", Autonomous Agents 98, pp. 392-399.
+[11] F. Schneider, "Towards Fault-tolerant and Secure Agentry", Proceedings
+111th International Workshop on Distributed Algorithms, Lecture Notes in
+Computer Science, Volume 1320, September 1997, pp. 1-14.
+[12] K. Birman, M. Hayden, O. Ozkasap, Z. Xiao, M. Budiu and Y. Minsky
+"Bimodal Multicast" ACM Transactions on Computer Systems, Vol. 17,
+No. 2, May 1999.
+[13] PSCAD/EMTDC Manual, Getting Started, Manitoba HVDC Center 1998
+[14] A. Phadke and J. Thorp, Computer Relaying for Power Systems, John
+Wiley and Sons INC., 1988.
+
+IX. BIOGRAPHIES
+Denis V. Coury was born in Brazil, in 1960. He received a B.Sc. degree in
+Electrical Engineering from the Federal University of Uberlandia, Brazil in
+1983, a MSc degree from the University of São Paulo, Brazil in 1986 and a
+Ph.D. degree from Bath University, England in 1992. He joined the
+Department of Electrical Engineering, University of São Paulo, São Carlos,
+Brazil in 1986, where he is an Associate Professor in the Power Systems Group.
+Presently he is at Cornell University for his Sabbatical leave. His areas of
+research interest are Power System Protection as well as new techniques for
+Power System Control and Protection including the use of Expert Systems and
+Artificial Neural Networks. Email coury@ee.cornell.edu
+James S. Thorp is the Charles N. Mellowes Professor in Engineering and
+Director of the School of Electrical Engineering at Cornell University. In 1976,
+he was a faculty intern at the AEP Service Corporation. He was an associate
+editor for IEEE Transactions on Circuits and Systems from 1985 to 1987. In
+1988, he was an overseas fellow at Churchill College, Cambridge, England. He
+is a member of the National Academy of Engineering, a Fellow of IEEE and a
+member of the IEEE Power System Relaying Committee, CIGRE, Eta Kappa
+Nu, Tau Beta Pi and Sigma Xi. Email jst6@cornell.edu
+Kenneth M. Hopkinson is a native of Charlotte, North Carolina. He received
+his BS degree in Computer Science from Rensselaer Polytechnic Institute in
+1997. Since that time, Ken has been working towards his Ph.D. degree in
+Computer Science at Cornell University in Kenneth Birman's Ensemble
+research group. His areas of interest include distributed computer systems and
+network communications protocols. Ken Hopkinson is currently investigating
+communications issues arising in the power grid under deregulation. Email
+hopkik@cs.cornell.edu
+Kenneth P. Birman is a Professor of Computer Science at Cornell University.
+A Fellow of the ACM, Birman has published extensively on reliable, secure
+distributed computing since joining Cornell in 1982. He developed the Isis
+Toolkit, which controls communication in the New York Stock and Swiss
+Exchanges, the French air traffic control system, and oversaw development of
+Cornell’s Horus, Ensemble and Spinglass systems. He was Editor in Chief of
+ACM Transactions on Computer Systems from 1994-1999. He has advised the
+government on hardening the nationally critical communications infrastructure,
+and was co-chair of the 1995 DARPA ISAT study that set the research agenda
+in this field. Email ken@cs.cornell.edu
+
+
