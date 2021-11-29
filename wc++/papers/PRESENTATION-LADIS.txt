@@ -1,0 +1,430 @@
+Declarative Reliable
+Multi-Party Protocols
+Krzys Ostrowski, Ken Birman, Danny Dolev
+
+Intro
+
+(1)
+
+(2)
+
+Objective
+• High-level language to describe protocols
+– Clarity, (relative) simplicity
+– Expressiveness: VS, transactions, weaker models
+
+• Scalable runtime
+– Efficiency: streams of events, high throughputs
+– Scalability: large deployments, churn
+
+• (connection to type systems)
+
+(3)
+
+protocol Cleanup {
+interface {
+declarations
+callback Receive(int m);
+Cleanup(int m);
+}
+plumbing
+properties {
+intset Stable, CanCleanup;
+}
+bindings {
+on Receive(m) : Stable += m;
+on update CanCleanup(add A) : foreach (m in A) Cleanup(m);
+}
+rules {
+Stable := [mono,all] children().Stable;
+global.CanCleanup := Stable;
+protocol
+CanCleanup = parent.CanCleanup;
+logic
+}}
+(4)
+
+Model
+
+protocol Cleanup {
+interface {
+callback Receive(int m);
+Cleanup(int m);
+}
+…
+}
+(5)
+
+protocol notifies the component:
+“now you can delete the message”
+
+component
+notifies the
+protocol:
+“i got a new
+message”
+
+E.g. when to deliver messages, when to cleanup,
+commit or abort, what decision to agree on etc.
+modeled
+explicitly
+
+background
+process
+
+perhaps
+unreliable
+
+E.g. disseminate updates, run the “prepare” phase
+of 3PC, propose decisions to consider in Paxos etc.
+(6)
+
+External to the protocol,
+manages configuration,
+fault-tolerant,
+a consensus “provider”
+Fragile and volatile,
+non fault-tolerant
+
+(7)
+
+Language
+
+properties {
+intset Stable;
+}
+
+(8)
+
+bindings {
+on Receive(m) :
+Stable += m;
+}
+
+properties are
+tied to actions
+
+Semantics:
+Liveness
+if:
+
+Ck. m  Ck.Stable
+then:
+eventually
+Ck. m  Ck.CanCleanup
+Correctness
+if:
+on update CanCleanup(add A) :
+foreach (m in A) Cleanup(m);
+(9)
+
+Ck. m  Ck.CanCleanup
+then:
+Ck. m  Ck.Stable
+
+(10)
+
+changes to values of properties
+cause changes to values of other properties
+
+(11)
+
+target property
+to be updated
+update
+operator
+
+expression
+
+rules {
+Stable := [mono,all] children().Stable;
+global.CanCleanup := Stable;
+CanCleanup = parent.CanCleanup;
+}
+(12)
+
+property that “lives elsewhere”
+
+entity representing
+a set of components
+
+“root” entity
+= entire system
+
+global
+X
+
+Y
+
+P
+A
+
+Q
+B
+
+C
+
+R
+D
+
+entity representing
+a single component
+(13)
+
+E
+
+S
+F
+
+G
+
+H
+
+children().Stable
+at “DC1” translates to A.Stable  B.Stable
+
+(14)
+
+parent.CanCleanup
+at “DC1” translates to Org1.CanCleanup
+
+entities are “delegated” by the Oracle to nodes
+
+physical node = agent “container”
+peers in the hierarchy form “peer groups”
+(15)
+
+bindings {
+on Receive(m) : Stable += m;
+(…)
+
+(16-1)
+
+(B1)
+
+rules {
+Stable := [mono,all] children().Stable; (R1)
+(…)
+
+(16-2)
+
+global.CanCleanup := Stable; (R2)
+
+(16-3)
+
+CanCleanup = parent.CanCleanup; (R3)
+
+(16-4)
+
+on update CanCleanup(add A) :
+foreach (m in A) Cleanup(m);
+
+(16-5)
+
+(B2)
+
+Monotonicity:
+“newer” calculation must use “fresher” values
+Stable := [mono,all] children().Stable; (R1)
+
+(17)
+
+Dataflow Evaluation of Rules
+• Rules written to
+– Operate on a set of values at a time
+– Asynchronously: PF decides when to evaluate
+– Hierarchically
+
+• Permits PF to achieve efficient, dataflow style
+of execution
+– Think of a spreadsheet… that batches updates
+– Permits very high performance, scalability
+
+Joins
+•
+•
+•
+•
+
+Regular members vs. “joining” members
+Joining members execute some rules, not all
+Add conditions for being a “full member”
+Conditions OK: upgrade “joining” to regular
+
+conditions {
+parent.Stable  Stable; }
+
+(19)
+
+Examples
+
+protocol CoordinatedPhases {
+interface { Phase(int k); }
+properties { int Last = 0, Next; }
+bindings {
+on update Next(assign k) : Phase(k); }
+
+rules {
+Last := [mono,all] children(min).Last;
+global.Next := Last + 1;
+Next [mono] := parent.Next;
+local.Last := Next; } }
+(20)
+
+Forwarding
+local.HeardOf = Stable;
+HeardOf = children().HeardOf;
+HeardOf = parent.HeardOf;
+
+(R5)
+(R6)
+(R7)
+
+local.Missing := [delay] HeardOf \ Stable; (R8)
+Missing := children().Missing;
+(R9)
+local.Cached := Stable \ CanCleanup;
+Cached := children().Cached;
+(21)
+
+(R10)
+(R11)
+
+Commit
+on Received(m) :
+if (Ok(m)) CommitOk += m;
+else AbortOk += m;
+CommitOk := [mono, all]children().CommitOk;
+AbortOk = children().AbortOk;
+global.ToCommit [mono] := CommitOk;
+global.ToAbort [mono] := AbortOk;
+ToCommit [mono] := parent.ToCommit;
+ToAbort [mono] := parent.ToAbort;
+(22)
+
+Evaluation
+
+Latency insensitive to transaction rate (TPS),
+sustainable TPS limited due to fixed token rates and sizes
+N = 10000, fanout = 10, P(commit) = 95%, network latency = 10ms
+(24)
+
+unpredictable decisions => larger tokens
+decision requires agreement (commit) => takes more time
+N = 4096, fanout = 8, TPS = 1000, relaxed token sizes
+(25)
+
+higher token rate => less latency
+interval between tokens < token roundtrip time => more latency
+N = 4096, fanout = 8, TPS = 1000, bounded token sizes
+(26)
+
+decision latency = O(log N)
+TPS = 1000, P(commit) = 95%, network latency = 10ms
+(27)
+
+latency O(log N) => token size O(log N)
+upper bound on scalability
+(28)
+
+larger fanout => higher token roundtrip => more latency
+smaller fanout => deeper hierarchy = > more latency
+N = 1000, TPS = 1000, network latency = 10ms, token rate = 10/s
+(29)
+
+immunity to churn
+MTTF < a few seconds => nonstop reconfiguration, no useful work
+MTTR = 5s, fanout = 8, network latency = 10ms, token rate = 10/s
+(30)
+
+number of protocols
+1
+10
+100
+Coordinated Phases (section 4.1)
+token size (KB)
+0.10
+0.69
+6.53
+time per token (µs)
+94
+578
+5312
+Commit (section 4.3)
+token size (KB)
+1.31
+13.71 couldn’t
+time per token (µs)
+197
+1927 simulate
+token sizes and processing times include all processing
+N = 3125, fanout = 5, network latency = 10ms, token rate = 18/s,
+P(commit) = 95%, TPS = 1000.
+With 100 commit protocols simulator crashes (out of memory).
+
+(31)
+
+number of protocols
+1
+10
+100
+Coordinated Phases (section 4.1)
+aggregation (µs)
+1
+9
+101
+dissemination (µs)
+1
+8
+106
+serialization (µs)
+92
+561
+5105
+Commit (section 4.3)
+aggregation (µs)
+16
+240
+couldn’t
+dissemination (µs)
+38
+440
+simulate
+serialization (µs)
+147
+1247
+decomposition of token processing times
+serialization/deserialization accounts for 66-99% of overhead
+
+(32)
+
+Conclusions
+
+Status (1)
+• Easy:
+– Peer to peer loss recovery
+– Virtual synchrony
+– Replicated state machines
+– 2PC, 3PC etc.
+
+• Hard:
+– E3PC
+– Consensus-like protocols
+
+(33)
+
+Status (2)
+• Know:
+– Automated translation from specifications to C#
+– Scalable protocol execution in system size, churn
+– Support high event rates
+– Scalable Oracle
+
+• Don’t know:
+– Support for millions of “overlapping” live objects
+– Formal type system
+– Formal logic, reasoning about properties
+– Self-configuration
+(34)
+
+

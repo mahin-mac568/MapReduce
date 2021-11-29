@@ -1,0 +1,2826 @@
+297
+
+Wireless Networks 1 (1995) 297^309
+
+The design and implementation of a private message service for
+mobile computers
+
+3y
+
+David A. Cooper and Kenneth P. Birman
+Department of Computer Science, Cornell University, Ithaca, NY 14853^7501, USA
+
+Abstract. Even as wireless networks create the potential for access to information from mobile platforms, they pose a problem for privacy. In order to retrieve messages, users must periodically poll the network. The information that the user must give
+to the network could potentially be used to track that user. However, the movements of the user can also be used to hide the user's
+location if the protocols for sending and retrieving messages are carefully designed. We have developed a replicated memory service which allows users to read from memory without revealing which memory locations they are reading. Unlike previous protocols, our protocol is efficient in its use of computation and bandwidth. In this paper, we will show how this protocol can be
+used in conjunction with existing privacy preserving protocols to allow a user of a mobile computer to maintain privacy despite
+active attacks.
+
+have some means of getting messages to their intended
+
+1. Introduction
+
+recipients, addressing information can not simply be
+In some cases, the sole purpose for carrying a mobile
+
+encrypted along with the message data. One way to solve
+
+computer is to allow others to quickly locate the carrier
+
+this problem is to send messages through intermediary
+
+(e.g. an active badge location system). In most cases,
+
+computers which secretly pass messages from one com-
+
+however, people carry mobile computers in order to send
+
+puter
+
+and receive information. While this may include mes-
+
+network
+
+sages from other users who are trying to contact them, it
+
+paper). However, in a mobile network, it is possible to
+
+is not necessary, in general, to locate someone in order
+to contact that person. Moreover, it is common for users
+of
+
+communications
+
+networks
+
+to
+
+desire
+
+privacy.
+
+The
+
+focus of our work is on providing mechanisms for preserving privacy while permitting mobile communication.
+In designing a system which preserves privacy for
+mobile users, we found it useful to partition privacy into
+three semi-independent components. The first is content
+privacy which is preserved if an attacker
+
+1
+
+is unable to
+
+extract the plain-text of the data sent from one computer
+to another. Content privacy can be maintained through
+the proper use of message encryption and signatures.
+Even if the data portion of a message is encrypted,
+an attacker may be able to obtain useful information. By
+observing the addressing information attached to messages, the attacker may be able to determine who is communicating with whom. Since the network needs to
+
+to
+
+another
+[6,14]
+
+(an
+
+which
+
+example
+will
+
+be
+
+of
+
+this
+
+discussed
+
+is
+
+a
+
+later
+
+MIXin
+
+this
+
+take advantage of the computers' mobility to design a
+more efficient protocol to hide this information from an
+attacker
+
+than
+
+is
+
+possible
+
+in
+
+a
+
+static
+
+network.
+
+In
+
+section 5, we will present such a protocol.
+The third type of privacy is location privacy. Just as
+with cellular telephones, many people will soon begin to
+carry mobile computers with them wherever they go.
+While the users of these computers will wish to be able to
+receive messages from others at any time, they will not
+want others to be able to locate them. In addition to
+determining
+
+who
+
+is
+
+communicating
+
+with
+
+whom,
+
+an
+
+attacker may attempt to use traffic analysis to electronically ``stalk'' users. As we will show later, a MIX-network can be used by a computer that wishes to send a
+message while hiding its location.
+While a MIX-network can also be used to allow a
+computer to receive a message while hiding its location,
+it is not very efficient. In section 7, we will present a tech-
+
+3
+
+The
+
+work
+
+reported
+
+was
+
+supported
+
+by
+
+ARPA/ONR
+
+grant
+
+N00014-92-J-1866 and a grant by Siemens Corp. The views expressed
+herein are those of the authors and do not represent the opinions of
+ARPA/ONR or Siemens Corp.
+
+y
+
+nique, developed by the authors, which will allow a computer to read from a shared memory in such a way that
+an attacker will be unable to determine which piece of
+
+This paper is a revised and extended version of ``Preserving Priv-
+
+information is being read and in section 8 we will show
+
+acy in a Network of Mobile Computers'' presented at the 1995 IEEE
+
+how this protocol can be used to create a message service
+
+Symposium on Security and Privacy.
+
+which will allow mobile computers to read messages
+
+1
+
+any
+
+Throughout this paper, when we refer to an attacker, we mean
+entity
+
+which
+
+attempts
+
+to
+
+acquire
+
+information
+
+that
+
+it
+
+is
+
+not
+
+without revealing their location. The message service
+
+intended to receive. In all cases, an attacker will be assumed to be lim-
+
+and the protocols for interacting with it are depicted in
+
+ited to polynomial time computations.
+
+Fig. 1.
+
+Ä
+
+J.C. Baltzer AG, Science Publishers
+
+298
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+Fig 1. The message service.
+
+teed. While this technique is secure, it requires that every
+
+2. Related work
+
+computer send and receive a large volume of data as
+Message encryption and signatures are essential to
+
+well as share a large amount of secret data. This techni-
+
+all security and privacy schemes. There are two basic
+
+que is also not well suited for mobile computers which
+
+types of encryption schemes, symmetric and asym-
+
+may frequently disconnect from the network.
+
+metric. In a symmetric (secret key) scheme, the same key
+
+In [4], Brassard, Crepeau, and Robert present a tech-
+
+is used for both encryption and decryption. In most
+
+nique which allows a computer to read from a database
+
+cases, the secret key is known to a pair (or group) of com-
+
+without revealing which piece of information it is read-
+
+municating parties and kept hidden from all outsiders.
+
+ing. In addition, it guarantees that the reading computer
+
+While there are many different secret key encryption
+
+will only be able to read one piece of information. In
+
+schemes, the most well known is DES [9]. In an asym-
+
+the protocol, the entire contents of the database is trans-
+
+metric (public key) scheme, the encryption and decryp-
+
+ferred to the reader in an encrypted form. The reader
+
+tion keys are distinct. In addition, it is infeasible for
+
+and the database then engage in a zero-knowledge proto-
+
+someone who only knows the encryption key to deter-
+
+col to enable the reader to decrypt one of the database
+
+mine the value of the decryption key. In most cases, the
+
+entries. Since our protocol does not limit the amount of
+
+encryption (public) key is made widely available while
+
+information that a reader can acquire, our memory ser-
+
+the decryption (private) key is known only to a single
+
+vice could be implemented by simply sending the entire
+
+user (its owner). An example of a public key scheme is
+
+contents of memory unencrypted. In section 7, we will
+
+RSA [19]. As with most public key encryption schemes,
+
+present a protocol which satisfies our more limited
+
+RSA can also be used to sign messages. Messages are
+
+requirements which has a small bandwidth overhead.
+
+signed using the decryption key and verified using the
+
+There has been some work in the area of privacy for
+
+encryption key. The details of message encryption and
+
+mobile computers. In [2,3,5], protocols are presented
+
+signatures are beyond the scope of this paper (see [21] for
+
+which encrypt messages that are sent along wireless links
+
+an overview of the subject).
+
+thus preventing an attacker from using the contents of
+
+There are several papers which describe protocols
+
+these messages to locate users. The main goal of these
+
+for maintaining the unlinkability of message senders and
+
+papers is to limit the computational overhead of the
+
+recipients. The concept of a MIX-network was intro-
+
+mobile computers. While the protocols in these papers
+
+duced by David Chaum in [6]. A MIX-network takes in a
+
+will maintain the unlinkability of message senders and
+
+batch of messages and scrambles them so that an
+
+recipients as well as the location privacy of mobile com-
+
+attacker can not match incoming messages with out-
+
+puters, they assume that the static network is secure. In
+
+going messages. There are several other papers describ-
+
+this paper, we will present protocols which are resilient
+
+ing variations of the original scheme [10,11,12,15]. The
+
+to attacks on the static network.
+
+protocols in [6,10] have security problems which were
+corrected in [13,14].
+In [7], David Chaum presents an information theore-
+
+3. System model
+
+tically secure technique for preserving the unlinkability
+of the sender and recipient of a message. This paper
+
+3.1. Mobile computers
+
+describes a protocol for creating a virtual network in
+which computers can
+
+anonymously.
+
+The system consists of a set of mobile computers
+
+Every computer can read every message (although they
+
+send
+
+messages
+
+which are assumed to be anonymous by default. By this
+
+may be encrypted), but no computer is able to determine
+
+we mean that if every mobile computer were to send and
+
+the sender of the message. Since messages are broadcast
+
+receive the same sequence of signals, then no attacker
+
+to every computer, recipient anonymity is also guaran-
+
+could determine the identity of any computer. In other
+
+299
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+words, the only information an attacker can use to deter-
+
+While techniques have been developed for implementing
+
+mine the identity of a mobile computer is any informa-
+
+services which can handle crash failures or a limited
+
+tion that it can infer from the sequence of messages that
+
+number of malicious failures, fault tolerance is beyond
+
+the mobile computer sends and receives. Using this
+
+the scope of this paper. Techniques for creating fault tol-
+
+assumption, we will be able to demonstrate that our sys-
+
+erant services can be found in [16].
+
+tem preserves privacy by showing that a mobile computer does not send or receive any messages that might
+
+3.4. The message service
+
+provide an attacker with information about the compuThe message service is
+
+ter's identity.
+
+used to send messages to
+
+mobile computers. Sending a message to a mobile com3.2. Base stations
+
+puter involves two steps. First, the sender attaches a
+label
+
+Mobile computers communicate by sending messages
+2
+
+to the message and sends it to the message service.
+
+Next, the intended recipient, upon discovering that the
+
+A
+
+message is available, requests the message from the mes-
+
+mobile computer is said to be in the area of a base station
+
+sage service. The reason for this approach is twofold.
+
+to,
+
+and
+
+receiving
+
+messages
+
+from,
+
+base
+
+stations
+
+.
+
+6
+
+3
+
+. A
+
+First, it provides a means for computers to anonymously
+
+mobile computer sends a message in the same way as a
+
+receive messages. Second, it allows one computer to
+
+static computer. It attaches a header to the message with
+
+send a message to another computer even if the second
+
+the destination address and then forwards the message
+
+computer is not currently connected to the network. As
+
+to the nearest base station which will route the message
+
+will be shown later, most of the labels will be chosen ran-
+
+towards its destination.
+
+domly. Therefore, labels should be large enough so that
+
+if it is able to communicate with that base station
+
+When a mobile computer wishes to send a query for
+which it expects a response
+
+4
+
+, it must use an RPC. The
+
+the probability of two messages having the same label is
+acceptably small
+
+7
+
+.
+
+request will be sent to the appropriate server and the ser-
+
+All messages must be of the same length. Messages
+
+ver will respond by sending its reply message to the base
+
+longer than the standard length must be fragmented and
+
+station from which the query originated. If the mobile
+
+then re-assembled by the recipient. The specific means
+
+computer moves to another base station before the reply
+
+of choosing labels for messages as well as the protocols
+
+arrives then it must re-send its request
+
+5
+
+.
+
+for sending messages to, and retrieving messages from,
+the message service are vital to providing privacy and
+
+3.3. The network
+
+will be discussed in detail later.
+
+The network consists of a set of static computers and
+a set of communications links. The static computers are
+
+4. Content privacy
+
+the base stations, the routers, and any servers that will be
+discussed later in the paper. We assume that the communications
+
+links
+
+and
+
+the
+
+routers
+
+can
+
+be
+
+read
+
+by
+
+A conversation between two computers, p and q,
+
+an
+
+begins with one of the computers, say p, sending an
+
+attacker, but the attacker is unable to modify or delete
+
+initiation message to the other computer. Since secret
+
+any of the messages. We also assume that timestamps
+
+key encryption is, in general, much more efficient than
+
+and nonces are used as appropriate to prevent message
+
+public key encryption, messages sent between p and q
+
+replay attacks. Servers, on the other hand, are consid-
+
+should be encrypted using a secret key. However, since p
+
+ered to be secure unless specified as being corrupt. An
+
+and q do not share any secret information before the
+
+attacker can read messages that go into or come out of a
+
+initiation message is sent, some form of key exchange
+
+correct server but does not have access to the contents
+
+must be used to generate the secret key. A simple solu-
+
+of the server's memory.
+Throughout this paper, we assume that servers, both
+correct and corrupt, do not crash or behave maliciously.
+
+tion is to have the initiator, p, generate a secret key, Ks ,
+and encrypt Ks with q's public key, Kq . The initiation
+message can then be Kq Ks ; Ks m where m is any information that p wishes to send to q.
+The initiator, p, can look up q's public key in a trusted
+
+2
+
+In a wireless network, a base station is a network router that
+
+authentication service
+
+8
+
+. As long as p trusts the authenti-
+
+has a wireless connection.
+3
+
+In the future, when we refer to the location of a mobile computer,
+
+we will mean the area of the base station with which it is connected.
+4
+
+As will be shown later, this includes retrieving messages sent to
+
+it by other computers.
+5
+
+6
+
+A label in our system is equivalent to a visible implicit address
+
+in [12].
+7
+
+If two messages, intended for different recipients, use the same
+
+If mobile computers move from base station to base station
+
+label, then both recipients will read in and attempt to decrypt both
+
+quickly relative to the round-trip time of an RPC, the server can send
+
+messages. While this will not affect security or privacy, it will affect
+
+its reply to all of the base stations whose areas are neighbors of the
+
+performance.
+
+area from which the request originated in addition to the originating
+base station.
+
+8
+
+The authentication service only needs to be trusted to provide cor-
+
+rect information. It does not need to maintain any secret information.
+
+300
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+cation service, it will know that q, and only q, will be
+
+remain secret for the remainder of the conversation. In
+
+able to read the initiation message. As written above,
+
+order to accomplish this, p can generate a random return
+
+however, the initiation message provides q with no way
+
+``address'' label, rp , and send this label to q in the initia-
+
+of verifying that the initiation message came from p. In
+
+tion message. If rp is encrypted, then only p and q will
+
+some cases, the initiating computer's user may wish to
+
+know its value thus making rp a private label. This label
+
+remain anonymous and the receiving computer's user
+
+can then be used by q to send a message to p without an
+
+may not be interested in authenticating the initiator. For
+
+attacker being able to determine that p is the intended
+
+example, one may wish to call an airline to find out about
+
+recipient of the message.
+
+available flights. In this case, the airline may not be inter-
+
+In order to further reduce the amount of information
+
+ested in authenticating the caller unless the caller tries
+
+that an attacker might be able to infer from messages
+
+to book a reservation.
+
+sent between p and q (such as the number of messages
+
+In many cases, someone receiving an initiation mes-
+
+that q exchanged with its secret communicating party),
+
+sage may not want to send any messages to the initiator
+
+each subsequent message (from both p and q) should con-
+
+unless the identity of the initiator has been authenti-
+
+tain a new randomly generated return ``address'' label.
+
+cated. To accomplish this, the initiator may receive a certificate from the authentication service. The certificate
+will be a signature, by the authentication service, of p's
+
+fid ; K g ÿ ). The initiator, p, can
+; K fid ; K g ÿ ; fid ; id ; mg ÿ  to q
+9
+
+public key (i.e.
+send Kq Ks
+
+p
+
+s
+
+p
+
+p
+
+K
+
+p
+
+1
+
+6. Location privacy while sending a message
+
+then
+
+a
+
+K
+
+1
+
+a
+
+p
+
+q
+
+K
+
+1
+
+thus
+
+In the previous two sections, we assumed that both
+
+p
+
+allowing q to authenticate p.
+
+parties
+
+wished
+
+to
+
+maintain
+
+privacy.
+
+We
+
+made
+
+this
+
+assumption since it is impossible to prevent an attacker
+from obtaining the identities of the participants or the
+
+5. Unlinkability of sender and recipient
+
+contents of the messages in a conversation if the attacker
+is in collusion with one of the conversation's participants
+
+Since mobile computers are anonymous by default,
+
+(if the conversation initiator does not identify itself to
+
+the relationship between senders and recipients can be
+
+the other participant, then the attacker can only acquire
+
+hidden by carefully choosing message labels. Labels can
+
+participant information by colluding with the initiator).
+
+be divided into two basic categories. Label l is public if
+
+On the other hand, p should be able to prevent q from
+
+it is known to every user (i.e. available in a public direc-
+
+determining its location even if p and q are engaged in a
+
+tory) and private if it is known only to the sender and the
+
+conversation.
+
+intended recipient of the message.
+As in the previous section, a conversation between
+
+If p trusts q (i.e. believes that q will not attempt to
+locate it or does not mind being located by q), then it is
+
+two mobile computers, p and q, begins when one of the
+
+easy
+
+computers, say p, sends an initiation message to the
+
+described in the previous section, p does not include any
+
+other computer. Since p and q do not share any secret
+
+(unencrypted) information about its identity in the mes-
+
+information before p sends the initiation message, the
+
+sages that it sends to q, only q would be able to identify
+
+only (feasible) way for p to send a message to q is to use a
+
+p as the message sender. Thus, an outsider will be able to
+
+public label for q (which can be found in an authentica-
+
+determine that a message was sent from a certain loca-
+
+tion service along with q's public key). So, an initiation
+
+tion, but only q will know that p sent the message.
+
+for
+
+p
+
+to
+
+maintain
+
+location
+
+privacy.
+
+Since,
+
+as
+
+message (either the authenticated or unauthenticated
+
+If p wishes to hide its location from q, then p must
+
+version from the previous section) should be sent to q by
+
+work to hide the location from which it sends its mes-
+
+attaching q's public label to the message and then send-
+
+sages. One possible solution to this problem is to use a
+
+ing the message to the message service.
+
+MIX-network [6,14] which takes batches of messages
+
+Since the initiation message contains q's public label
+in plain-text, an attacker will be able to determine that
+
+and scrambles them so that it is impossible to determine
+which message came from where (see Fig. 2).
+
+an initiation message was sent to q. However, the initia-
+
+The static network contains a set of w MIXes each
+
+tion message does not contain any (unencrypted) infor-
+
+having its own public key pair. We assume that at most
+
+mation that would allow an attacker to determine that p
+
+t < w of the MIXes will be corrupted
+
+sent the message. Since p's identity remains secret (to
+
+a
+
+all except possibly q), an attacker will not be able to
+
+MIXes (call them M1 ; M2 ; . . . ; Mt1 ) and encrypts the
+
+determine that p and q are communicating with each
+
+message as follows:
+
+message,
+
+a
+
+mobile
+
+computer
+
+10
+
+. In order to send
+
+chooses
+
+t
+
+1
+
+of
+
+the
+
+other.
+In order to maintain this privacy, p's identity must
+10
+
+A server is corrupted if an attacker is able to read the contents
+
+of the server's memory or knows the server's private key. As was men-
+
+9
+
+The notation
+
+key which is m; K
+
+fmg
+
+ÿ1
+
+a
+
+tioned earlier, we are assuming in this paper that servers do not fail.
+
+K
+
+ÿ1 signifies the signature of m using a's private
+
+a
+
+ where h is a one-way hash function.
+
+h m
+
+However, all of the services described in this paper could be designed
+to handle a limited number of crash or malicious failures.
+
+301
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+would include an anonymous return address [6,11,14]
+which could be used by the message repository to send
+the response (via the MIX-network).
+The problem with the above technique is that the
+mobile computer must inform the message repository of
+the label in which it is interested. If the label is public or
+if the message repository is in collusion with the message
+sender (and the sender knows the identity of the intended
+recipient) then the message repository will know the
+identity of the requesting computer. Since the mobile
+computer may reveal its identity by sending the request
+message, it must hide the location from which it sends
+the message. While this method will guarantee location
+privacy for the recipient, it is very expensive.
+An alternative is for the mobile computer to send
+request messages that do not contain any information
+which would allow the message repository to identify the
+requester (thus eliminating the need for the mobile computer to hide the location from which it sent the message). In designing a protocol to achieve this goal, our
+main objectives were to minimize the computational and
+Fig. 2. Mix network (from [12]).
+
+bandwidth overhead involved (especially for the mobile
+computers).
+
+KM1 KM2 . . . KMt1 l; m; S  . . . ; M3 ; M2  :
+In the above equation, l is the message label, m is the
+encrypted message, KM1 ; . . . ; KMt1 are public keys of
+M1 ; . . . ; Mt1 , and S is the address of a server (the final
+destination of the message). (As is explained in [6,14],
+the above message must be peppered with random data
+after each encryption step in order to prevent active
+
+In this section, we will describe a protocol for a replicated
+
+Each MIX reads in a block of messages, decrypts
+
+in some random fashion, and then sends each message to
+the next MIX in the chain or to a server. It is assumed
+
+memory
+
+which
+
+will
+
+allow
+
+a
+
+computer
+
+tion (one in which an attacker is unable to determine
+which position in memory is being read). In the next section, we will modify this protocol for use as a message
+repository for mobile computers.
+A memory service consists of a set of n memory ser-
+
+attacks on the MIX-network.)
+
+them, removes the random data, reorders the messages
+
+shared
+
+(whether mobile or not) to perform a blinded read opera-
+
+vers each of which has an array of m cells labeled
+M 0; M 1; . . . ; M m
+
+ÿ 1. As in the previous section, we
+
+will assume that at most t < n of the servers will be
+corrupted.
+
+that an attacker, due to the decryption and reordering
+steps, will be unable to match the incoming messages of a
+
+7.1. Reading from memory
+
+MIX with the outgoing messages unless it has corrupted
+The technique for reading from memory is similar in
+
+the MIX. Since an attacker is unable to follow the path
+of a message that goes through an uncorrupted MIX and
+at least one of the t
+
+1
+
+MIXes is uncorrupted, the
+
+attacker will be unable to follow the path of the message
+from the base station to the server.
+
+nature to secret sharing. The requesting computer generates a set of t
+
+ 1 questions and
+
+sends each question to a
+
+different server. Just as in secret sharing, an attacker
+that is able to obtain at most t of the questions/answers
+will be unable to determine the secret. However, since
+the nature of the secret information is different in our
+
+7. A memory service with a blinded read operation
+
+scheme, secret sharing techniques are not appropriate
+for this problem.
+
+Just as the protocol of section 5 does not hide the loca-
+
+For this section, we will assume that only read opera-
+
+tion of the sender of a message from the message's
+
+tions are performed and that the contents of the servers'
+
+intended recipient, the protocol also does not protect the
+
+memories are the same. A computer wishing to read
+
+recipient from the sender. Mobile computers must also
+
+from memory should create t random bit-vectors of
+
+be able to receive initiation messages which use public
+
+length m. Next, it should create a t
+
+labels. One way to solve this problem is to use the MIX-
+
+exclusive-oring the t random bit-vectors and then flip-
+
+network. A mobile computer wishing to receive a mes-
+
+ping the pth bit (in order to read cell p). This will create a
+
+sage would send a request message, through the MIX-
+
+set
+
+network, to a message repository. The request message
+
+together, will yield the bit-vector Ip :
+
+of
+
+t
+
+1
+
+bit-vectors
+
+that,
+
+ 1st
+
+when
+
+bit-vector by
+
+exclusive-ored
+
+302
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+equally
+
+likely
+
+to
+
+0
+0
+0 or 1 and V i  8 V i 8
+0
+0
+0
+V i  8 V i  8 . . . 8 V i  is also
+
+be
+
+0
+00
+. . . 8 V i   :V i ,
+t
+
+1
+
+1
+
+2
+
+t
+
+2
+
+equally likely to be 0 or 1.
+
+
+
+case 2: i
+
+6
+
+p
+
+Since this is not the cell being read, we know that
+V
+
+0 i 8 V 0 i 8 . . . 8 V 0 i 8 V 00 i  0.
+
+1
+
+equally
+
+likely
+
+...
+
+i
+
+8 0  
+V
+
+t
+
+00 i is
+0
+0
+be 0 or 1 and V i  8 V i 8
+0
+0
+0
+V i  8 V i  8 . . . 8 V i  is also
+t
+
+2
+
+V
+
+to
+
+00 i,
+
+Since V
+1
+
+1
+
+2
+
+t
+
+2
+
+equally likely to be 0 or 1.
+
+ ; 
+
+Fig. 3. Sample bit-vectors for t
+
+
+
+
+
+Ip j
+
+0
+
+if j
+
+1
+
+if j
+
+2 p
+
+6
+
+
+0
+0
+each position, the value of V i  8 V i 8
+0
+. . . 8 V i  is equally likely to be 0 or 1 whether it is the
+
+Since,
+
+1.
+
+p,
+
+position being read or not, the attacker gains no information about which cell is being read.
+
+
+
+can be obtained
+
+Sparse bit-vectors
+
+using the protocol in Fig. 4. While it is not shown in the
+
+
+
+r 1 ; r2 ; . . . ; rt
+
+1
+
+and the responses
+
+must be encrypted so that only the client
+
+1
+
+and serveri can read the values of Vi and ri .
+
+using such a bit-vector can be computationally expensive
+
+are set to 1 with probability
+
+1
+2
+
+then an attacker which has
+
+access to at most t of the requests/responses associated
+bit-vectors
+
+each bit is equally likely to be either a 0 or a 1), then an
+
+information about the position being queried. However,
+
+Lemma 1. If each of the bits in the t random bit-vectors
+
+the
+
+As was shown in the previous section, if the bits in
+the random bit-vectors are truly chosen at random (i.e.
+
+attacker that sees at most t of the vectors will gain no
+
+Security of blinded read
+
+with
+
+will
+
+gain
+
+no
+
+information
+
+about
+
+which cell the client is reading.
+
+for the memory servers if the memories have a large
+number of cells or if the cells are large (in the next section, each cell will contain a message).
+One way to reduce the amount of work necessary to
+compute a response is to create random bit-vectors with
+fewer 1's. Instead of setting each bit to 1 with probability
+1
+
+Proof. Since the first t bit-vectors are chosen independently of the cell being read, an attacker will gain no
+information unless it has access to the t
+
+
+
+1st bit-vector.
+
+We will, therefore, assume that the attacker has the
+t
+
+
+
+1st bit-vector along with t
+
+ÿ
+
+1 of the t random bit-
+
+vectors. Let's call the bit-vectors that the attacker knows
+
+0 0
+0
+V ;V ;...;V
+00
+V .
+1
+
+and the bit-vector that it doesn't know
+
+t
+
+2
+
+case 1: i
+Since
+V
+
+
+
+this
+
+the
+
+cell
+
+being
+
+read,
+
+we
+
+know
+
+that
+
+2
+
+t
+
+'<
+
+1
+2
+
+.
+
+This will decrease the computation time but will increase
+the amount of information that an attacker can infer.
+The value for
+
+' must, therefore, be chosen carefully.
+', we should
+
+In order to determine a good value for
+
+look at the set of bit-vectors from an attacker's point of
+view to determine how much information the attacker
+can infer. We will assume the worst case scenario in
+
+
+
+that it doesn't know
+the value in cell p.
+
+Fig. 4. Bit-vector protocol.
+
+
+
+1 bit-vectors,
+
+1st vector. Let's call the vectors
+
+that the attacker knows V
+
+0 p 8 V 0 p 8 . . . 8 V 0 p 8 V 00 p  1. Since V 00 i is
+
+1
+
+, each bit could be set to 1 with a probability
+
+one of which is the t
+
+p
+is
+
+2
+
+which the attacker has acquired t of the t
+
+Say that the client is reading the value of cell p.
+
+
+
+2
+
+p.
+
+bit-vectors, the contents of cell M p
+
+
+
+1
+
+t
+
+An example of such a set is shown in Fig. 3. Using these
+
+figure, the bit-vectors V1 ; V2 ; . . . ; Vt
+
+for
+
+00
+V .
+
+0 ; V 0 ; . . . ; V 0 and the bit-vector
+
+1
+
+2
+
+t
+
+Say that the client is reading
+
+303
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+In order to compute the information that an attacker
+can infer, we will need the following values:
+ 10 8 20 8 8
+0  f j    0g
+1  f j    1g
+0
+00
+0  f j    0g
+0  f j 00    1g
+1 
+   01 ifif 6 .
+V
+
+V
+
+S
+
+i
+
+C i
+
+;
+
+S
+
+i
+
+C i
+
+;
+
+S
+
+i
+
+V
+
+i
+
+S
+
+i
+
+V
+
+i
+
+C
+
+...
+
+t
+
+;
+;
+
+j
+
+Ip j
+
+0
+
+V ;
+
+p;
+
+j
+
+p
+
+Due to the way that bit-vectors are created, we know
+that 00  8 . Therefore, we can compute the a posteriori probability that  as
+a priori probability that 00  8 :
+ÿ1
+X
+a priori probability that 00  8
+C
+
+V
+
+i
+
+p
+
+V
+
+C
+
+Ii
+
+m
+
+j
+
+V
+
+0
+
+C
+
+Ij
+
+The a priori probability that 00  8 , for each ,
+can be computed as follows:
+
+: 2 0
+In this case, j 00 j  j 0 j ÿ 1 and j 10 j  j 1j  1.
+From this we can conclude that the aj priori
+probability that 00  8 is 'j 1 j1 1 ÿ ' 0 jÿ1 .
+
+: 2 1
+In this case, j 00 j  j 0 j  1 and j 10 j  j 1j ÿ 1.
+From this we can conclude that the aj priori
+probability that 00  8 is 'j 1 jÿ1 1 ÿ ' 0 j1 .
+Using the above formulas, the a posteriori probability
+for position is
+8
+2
+>
+< j 0 j'2 j' 1 j 1ÿ'2 if 2 0 ,
+ > 1ÿ'2
+: j j'2 j j 1ÿ'2 if 2 1 .
+0
+1
+Since depends on j 0 j and j 1 j, in order to be able
+to choose a good value for ', we must estimate the values
+of j 0j and j 1j. If a position, , is not the one being read
+(i.e. 6 ), then    00 . Since 00   1 with
+probability ',    1 with probability '. Since there
+are ÿ 1 positions, , for which 6 , we can expect
+1 ÿ ' ÿ 1 to be in 0 and ' ÿ 1 to be in 1 . Since
+   : 00  , we have 2 0 with probability ' and
+2 1 with probability 1 ÿ '. Therefore, we can
+estimate j 0j  '  1 ÿ ' ÿ 1 and j 1j  1 ÿ '
+ ' ÿ 1 .
+In Fig. 5 we show the values for and j j for different values of ' for a memory with 1024 cells (the values
+for and j j were computed using the formulas above
+to estimate j j). In the case of '  1001 , there is a 99%
+chance that 2 1 and we can expect that j 1 j  11:22.
+While there is a chance that is among the approximately 1012.78 positions in 0, it is very unlikely. So,
+while seeing of the  1 vectors does not allow the
+attacker to rule out any of the positions entirely (for
+C
+
+V
+
+case 1 i
+
+Ii
+
+i
+
+S
+
+S
+
+V
+
+C
+
+case 2 i
+
+S
+
+S
+
+S
+
+S
+
+S
+
+S
+
+Ii
+
+S
+
+S
+
+S
+
+C
+
+V
+
+S
+
+S
+
+S
+
+Ii
+
+i
+
+S
+
+S
+
+i
+
+S
+
+i
+
+S
+
+Pi
+
+S
+
+S
+
+Pi
+
+S
+
+S
+
+S
+
+S
+
+i
+
+i
+
+p
+
+C i
+
+V
+
+i
+
+V
+
+i
+
+C i
+
+m
+
+i
+
+m
+
+C p
+
+p
+
+i
+
+p
+
+p
+
+m
+
+S
+
+V
+
+p
+
+S
+
+S
+
+S
+
+m
+
+S
+
+S
+
+m
+
+Pi
+
+Pi
+
+Fig. 5. Probabilities for  1024.
+m
+
+Ip
+
+Si
+
+Si
+
+Si
+
+p
+
+S
+
+S
+
+p
+
+S
+
+t
+
+t
+
+0 < ' < 1), if ' is relatively small (or large), the attacker
+will be able to extract a relatively small group of positions such that the cell being read is highly likely to be in
+that group.
+7.2. Writing to memory
+
+The protocol in Fig. 4 assumes that the contents of
+each server's memory will be the same. If the responses
+to the bit-vectors are computed using cell values that differ from server to server, the computed value for the
+desired cell will be incorrect. As an example, consider the
+bit-vectors in Fig. 3. The responses from the 3 servers
+will be
+1  1 1 8 1 2 8 1 4 ;
+2  2 0 8 2 1 8 2 3 8 2 4 8 2  ÿ 1 ;
+3  3 0 8 3 1 8 3 2 8 3 3 8 3  ÿ 1 ;
+and the computed answer will be
+2 0 8 3 08
+1 1 8 2 1 8 3 18
+answer  1 23 88 3 238
+2
+3 8
+1 4 8 2 48
+2  ÿ 1 8 3  ÿ 1 :
+If 1  2  3 then the above equation will reduce
+to answer = 1. However, if 23 6 33 for some
+reason (perhaps a write operation is in progress), then
+answer = 1 8 23 8 3 3 6 1.
+There are two possible ways that the above situation
+could occur. The first is if a read operation is performed
+concurrently with a write operation. The second is if a
+client performing a write operation sends different
+values to different servers or fails to inform some servers
+of the write operation. In order to prevent the first problem, all operations should be sent to the memory servers
+using a totally ordered multicast. For read operations,
+the  1 bit-vectors should be bundled together and sent
+as one message (since each bit-vector will be encrypted
+using a different secret key, each server will only be able
+r
+
+M
+
+M
+
+M
+
+r
+
+M
+
+M
+
+M
+
+M
+
+M
+
+m
+
+r
+
+M
+
+M
+
+M
+
+M
+
+M
+
+m
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+m
+
+t
+
+M
+
+m
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+M
+
+304
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+to read the bit-vector intended for it even though it will
+
+receive the broadcast (for example, those that are dis-
+
+receive all of the bit-vectors).
+
+connected from the network). Therefore, the base sta-
+
+If it is necessary to guard against a malicious client
+
+tions will also maintain a local copy of the digest and
+
+(or perhaps a malicious server), then the totally ordered
+
+resend it as necessary to ensure that every mobile compu-
+
+multicast must be tolerant to such behavior. The multi-
+
+ter receives the digest (see [1,8] for more information on
+
+cast protocol in [16] ensures that every correct server will
+
+multicasting in mobile networks).
+
+receive the same set of messages in the same order thus
+preventing a malicious process from corrupting memory
+in this fashion
+
+11
+
+8.1. Reading from a table
+
+.
+Each mobile computer will have a list of message
+labels in which it is interested (l
+
+0
+
+0
+
+8. Retrieving a message
+
+receives a digest, it will look for h
+
+;
+
+;
+
+the list h l0  h l1  . . .
+The message service acts as intermediate storage for
+messages intended for mobile computers (as shown in
+
+;h
+
+; l ; . . . ; l ). When it
+l ; h l ; . . . ; h l  in
+0
+
+0
+
+1
+
+k
+
+0
+
+0
+
+0
+
+0
+
+1
+
+k
+
+lmÿ1 . If the mobile computer
+0
+
+finds some i and j for which h l   h lj  then it will read
+i
+
+the message from cell j of the table.
+
+Fig. 1). Messages are sent to the service either directly or
+
+Mobile computers can read messages from the mes-
+
+through a series of MIX servers and are eventually
+
+sage service in one of two ways. If the label that it wishes
+
+retrieved by the intended recipient. In this section, we
+
+to read is private and the computer trusts the message
+
+will show how to use the memory service of the previous
+
+sender (or the message sender does not know the identity
+
+section to implement a message service which will enable
+
+of the recipient), then it can send a request to one of the
+
+blinded read operations.
+
+servers containing the pair
+
+;
+
+i j where i is the number of
+
+totally
+
+the table to be read and j is the number of the cell within
+
+ordered multicast (as was described in section 7.2). At
+
+that table which contains the message. If the label to be
+
+each server, arriving messages are placed in a list in the
+
+read is public or if the mobile computer does not trust the
+
+order in which they are delivered. This list is stored in a
+
+message sender, then it must use the blinded read opera-
+
+series of tables each of which holds m messages (i.e. the
+
+tion from section 7. The mobile computer will create
+
+i ÿ 1) div m in
+
+t  1 bit-vectors of length m and send each bit-vector,
+
+i ÿ 1 mod m). There is a tradeoff that must be con-
+
+along with the number of the table to read, to a different
+
+sidered when choosing a table size. First, the amount of
+
+message server. Since mobile computers can not read
+
+effort needed to read a cell from a table increases as m
+
+from tables until after they are filled (i.e. after the last
+
+increases (the client must create and encrypt bit-vectors
+
+write operation has completed), the request messages do
+
+of length m and the servers must decrypt the bit-vectors
+
+not need to be bundled and the totally ordered multicast
+
+and exclusive-or together
+
+protocol is not needed.
+
+Messages
+
+are
+
+sent
+
+to
+
+the
+
+servers
+
+ith message delivered is stored in table
+cell
+
+'m
+
+using
+
+a
+
+messages). In addition,
+
+mobile computers must wait until a table has filled
+before reading the messages in that table. Therefore, as
+
+8.2. Choosing a hash function
+
+m increases, the time between when a message arrives at
+the message service and when it can be read from the ser-
+
+If the hash function, h, used in creating message
+
+vice increases. On the other hand, as will be described
+
+digests is the identity function then there will never be a
+
+later, as m increases, the amount of privacy increases for
+
+case where h l   h lj  but l
+
+computers that read from the table.
+
+mobile computers which have messages intended for
+
+0
+
+0
+
+i
+
+i
+
+6 lj . This means that only
+
+Once a table has been filled, mobile computers may
+
+them in a table will read from that table. Since an
+
+read the messages from that table. In order to enable
+
+attacker can determine the location from which the
+
+message reading, a digest of the table's contents is cre-
+
+mobile computers read from the table, an attacker may
+
+ated and sent to all of the mobile computers. The digest
+
+gain useful information about computers' locations if m
+
+of a table is h l0  h l1  . . .
+
+mÿ1
+
+is small. If m can not be made large enough to sufficiently
+
+are the labels attached to the messages in each position
+
+confuse an attacker, then a hash function must be chosen
+
+of the table and h is a hash function.
+
+which will force some mobile computers to read mes-
+
+;
+
+;
+
+;h
+
+;
+
+lmÿ1  where l0 l1 . . .
+
+;l
+
+Since every mobile computer will need to see the
+
+sages from the table that were not intended for them.
+
+digest for every table, table digests are broadcast to
+
+Suppose, for example, that the total number of mes-
+
+mobile computers. Once a table is filled and its digest
+
+sage labels in which every mobile computer is interested
+
+computed, the digest is sent to all of the base stations
+
+is 64,000. If we choose a hash function, h, which maps
+
+(using a multicast protocol for the static network). Upon
+
+message labels to values between 0 and 31,999, then
+
+receipt, each base station broadcasts the digest over its
+
+there will be, on average, two message labels which hash
+
+wireless link. Some of the mobile computers will not
+
+to each value. If m  1024, then there will be approximately 2048 requests made to the message service. Of
+
+11
+
+Since the memory, as described, does not contain any access con-
+
+trols, an attacker may still cause problems by writing bad values.
+
+these, 1024 will be from the intended recipients of the
+messages in the table and 1024 will be from randomly
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+chosen mobile computers. Thus, an attacker seeing a
+mobile computer read a message from the table will
+know that there is only a 50% chance that the computer
+is the intended recipient of one of the messages in the
+table.
+8.3. Garbage collection
+
+In an infinite run of the system, an infinite number of
+messages will be sent to the message service. It is, therefore, essential to have some mechanism for removing old
+messages from the system. Ideally, a message should be
+deleted after it has been read by its intended recipient.
+However, since computers may retrieve messages anonymously, the message service may not know when this
+has happened.
+An approximate solution is to delete messages after
+some period of time 1 has passed. In our system, a table
+is left intact until its newest message has been in the system for time 1 at which point the entire table is deleted.
+If 1 is chosen properly, then every computer will have
+sufficient time to retrieve all messages intended for it
+while the number of tables stored in the system at any
+one time is manageable.
+In some cases, a computer will be disconnected from
+the network for a long period of time. This can happen if
+the computer moves outside of the range of all of the
+base stations or if the computer is turned off to conserve
+battery power. If the computer is disconnected for too
+long then it may miss some of the messages that were
+sent to it. In order to avoid this, we have developed a
+vacation service.
+A computer which is concerned about losing messages while it is disconnected from the network registers
+with the vacation service by sending it a list of message
+labels in which it is interested. If the vacation service
+does not receive a message from a registered computer
+within some specified period of time < 1, then the
+vacation service will begin to check the message service
+for messages with any of the specified labels and will
+store a local copy of those messages. When the mobile
+computer next contacts the vacation service, the vacation service will send any messages that it stored for the
+mobile computer to the message service and will then
+stop looking for any new messages for that computer.
+The mobile computer can then read the messages from
+the message service as usual.
+In order to prevent the vacation service from using
+the registration messages to locate the user, the mobile
+computer should use the techniques which were
+described in section 6 to hide the locations from which it
+sends the messages.
+
+305
+
+In practice, most conversations will only last for a short
+period of time. Many other conversations will be sporadic in nature, with periods of high message traffic followed by long periods with no traffic. Since a mobile
+computer, for each conversation, must store label and
+key information and check every table digest for a message, it is inefficient to have a large number of conversations when most of them are inactive.
+One technique for solving this problem is for computers to explicitly end conversations by including an ``end
+of conversation'' marker in a message instead of a return
+``address'' label. After sending this message, the sender
+can erase from its memory any information about the
+conversation and the recipient can do the same upon
+receipt of the message.
+An alternative is to use return ``address'' labels with
+expiration times. If the recipient does not send a message
+using the label before the label expires, then the sender
+will consider the conversation to have ended. If the recipient wishes to send a message after the expiration time,
+it can begin a new conversation by sending an initiation
+message. In order to have labels with expiration times, it
+is necessary to have synchronized clocks. This can be
+accomplished through the use of a time service. The
+details of clock synchronization and its use are beyond
+the scope of this paper. An overview of the subject can be
+found in [22].
+10. The implementation
+
+We have implemented a prototype of the private message service. In this prototype, all of the components
+are the same as they would be in a real implementation
+with the exception that the mobile computers are
+replaced by static processes on the network which communicate directly with the servers instead of communicating indirectly through base stations. However, since
+the primary concern in designing a private message service is the throughput of the servers, our prototype
+should provide an accurate indication of the performance of a real system.
+10.1. Horus
+
+We have implemented the private message service on
+top of the Horus group communications system [23].
+Horus has many features which aided in the implementation of our system. First, it supports group communication. As shown in Fig. 6, process groups are used within
+our system in several ways. The system consists of three
+types of processes (message servers, MIX servers, and
+users) which are organized into three process groups.
+The message service group, in general, is used for communication between the message servers and the users,
+the message server group is used to distribute messages
+Until this point, we have treated a conversation as a among the message servers, and the MIX service group
+sequence of messages with a beginning but with no end. is used to send messages through the chain of MIXes.
+9. Ending a conversation
+
+306
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+There are three basic operations that are associated
+with the message servers. The first is receiving user messages. In order for the message servers to maintain consistent states, users' messages must be delivered in the
+same order at all of the servers. In order to make this
+operation efficient, the process of sending a message to
+the message servers is divided into two steps. First, the
+user sends the message to the oldest message server (or
+the user sends the message through the MIX service and
+the final MIX in the chain sends the message to the oldest
+message server). Next, the oldest message server multicasts the message within the message server group. Since
+all of the messages are multicast by the same process,
+they can be sent using a protocol which only guarantees
+FIFO delivery. Thus the cost of a totally ordered multicast protocol is avoided.
+
+Fig. 6. Group structure.
+
+When a table has been filled, the digest for that table
+Horus also has several mechanisms which aid in making
+
+groups
+
+Horus
+
+user code, we would like to guarantee that each table
+
+implements the virtual synchrony model of computa-
+
+digest is delivered by each user exactly once and that the
+
+tion. Within this model of computation, it is relatively
+
+digests are delivered in order. To accomplish this, table
+
+easy to reconfigure the system after the failure of one of
+
+digests are multicast by the oldest message server within
+
+the servers to maintain a consistent state among the sur-
+
+the message service group using a multicast protocol
+
+viving servers. At the same time, Horus is designed in a
+
+which guarantees FIFO delivery. In addition to the
+
+very modular fashion so that a process only pays for
+
+users, the table digests are also delivered by the message
+
+those properties that it actually uses.
+
+servers which keep track of which table digests they
+
+Finally,
+
+fault-tolerant.
+
+have received so that they will know where to pick up if
+
+threads package. For the user processes, we have imple-
+
+they ever become the oldest server. This allows us to
+
+mented two distinct applications layers (see Fig. 7) one
+
+guarantee that users will always receive exactly one copy
+
+of which uses the X Window System. The use of multiple
+
+of each digest.
+
+made
+
+provides
+
+programming
+
+a
+
+importantly,
+
+independent
+
+threads
+
+Horus
+
+Most
+
+must be sent to all of the users. In order to simplify the
+
+machine
+
+this
+
+applications
+
+layer
+
+Once the users have received a table digest, they will
+
+much easier since the X Windows code could run in a
+
+read any messages from the table which may be intended
+
+separate thread from the message client layer code.
+
+for them. Messages are read from the message service
+using RPC style requests. A user wishing to read a cell in
+
+10.2. The message servers
+
+The message servers are responsible for both storing
+user messages and for handling requests from users
+wishing to retrieve messages. As a result, the message
+servers will, in general, be the bottleneck for system performance. With this in mind, we have carefully designed
+the system to minimize the costs of operations associated
+with the message servers.
+
+a table first selects one of the message servers at random
+(or t
+
+
+
+1 servers for a secure read operation). It sends
+
+the request message to this server and then waits until
+either the response arrives or the server crashes. If the
+server crashes, it will pick a new server and resend the
+request (for a secure read, only the requests associated
+with the crashed servers are resent).
+
+10.3. The MIX servers
+
+The MIX servers can be used by users when sending
+messages. The servers form a chain with the oldest server
+(server 0) as the first link and the newest server (server
+t) the last link. A user wishing to send a message through
+the MIX service encrypts the message for each of the servers (as shown in section 6) and then sends the message
+to MIX server 0. Server 0 decrypts incoming messages
+with its private key and then places them in a queue.
+Using the messages in the queue, the server creates
+batches of messages. Messages are selected for batches
+based on the order in which they arrive with the restriction that each batch contains at most one message from
+Fig. 7. The user process.
+
+each user (this is done to maintain FIFO delivery of mes-
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+sages as well as to prevent some types of attacks against
+the MIX service). Once enough messages have arrived to
+fill a batch, the messages in the batch are reordered and
+then sent to MIX server 1. Each subsequent MIX reads
+in the batch of messages, decrypts them, reorders them
+and then sends them to the next MIX in the chain. The
+final MIX (server ) sends the messages to the oldest message server.
+t
+
+10.4. The users
+
+The code for user processes is divided into two layers,
+the message client layer and the applications layer (see
+Fig. 7). In this section, we will describe the interface
+between the two layers and briefly describe the message
+client layer.
+A process beings by calling msg init with the user's
+public label and private key and the address of a function
+to be called whenever an initiation message arrives. The
+message client layer joins the message service group and
+the mix service group and places the user's public label
+on the list of labels to search for in the table digests.
+An initiation message is sent by calling the function
+send init with the intended recipient's public label and
+public key, the message to be sent, and the address of a
+function to call when a reply message arrives. The message client layer creates a random return ``address'' label
+which it adds to the message and places on the list of
+labels to search for in the table digests. The message is
+then fragmented into uniform sized pieces and each fragment is encrypted and sent in order.
+When a table digest arrives, the message client layer
+checks each element of the digest, in order, to see if it is
+on the list. If the hash value of a message stored in a cell
+matches the hash value of a label for which the message
+layer is waiting then a read request is sent. Once the value
+in the cell is read, the label on the message is checked
+and if it is on the list, the message is decrypted using the
+appropriate key. If the message is a fragment of a larger
+message, then it is added to the fragments that have
+already been received and the label of the next fragment
+is added to the list of labels for which the message client
+layer should search. Once the entire message has arrived,
+the appropriate function (from the application layer) is
+called with the message and a handle which can be used
+to reply to the message (the handle contains the return
+``address'' label and the secret key of the conversation).
+The applications layer can reply to the message by calling send non init with the message handle, the reply
+message, and the address of the function to be called
+when the reply message arrives. (A message handle may
+only be used to send one reply message).
+
+307
+
+tation of the system. First, we use a directory service to
+maintain the public keys of the servers and users. Since
+the directory service is not secure, the system can easily
+be attacked by altering the entries in this service. This
+needs to be replaced by a secured authentication service
+(such as described in [18]). This authentication service
+works in conjunction with a secure time service to provide public key certificates which are guaranteed to be
+fresh.
+In addition, the MIX servers do not protect against
+replay attacks. To prevent such attacks, users would
+have to add timestamps to the messages that they send
+through the MIX servers and MIX servers would have to
+maintain a cache of recently received messages to compare with incoming messages.
+Finally, our system can not handle many types of malicious attacks, especially attacks by malicious servers.
+While Horus is not currently capable of dealing with
+these types of failures, there is a toolkit (Rampart) under
+development at AT&T Bell Laboratories which provides
+the group semantics required by our protocols despite
+malicious attacks (see [16,17]).
+11. Performance
+
+In order to verify the feasibility of our protocols, we
+ran a series of tests to determine the costs associated with
+the different operations that the system must perform.
+Since latency is not a primary concern in a message system, we concentrated on measuring the throughput of
+the servers. Each of the tests involved a single user sending a series of 10 messages to itself in which each message
+was large enough to fill 128 packets (which was the size
+of a table in the message servers). While a commercial
+implementation of this system would likely use hardware
+to perform the cryptographic operations, our implementation made use of the RSAREF(TM) cryptographic
+toolkit from RSA Laboratories. Thus, as we will
+describe below, the time to perform cryptographic
+operations dominated the running time of our system.
+There are two ways to send a message to the message
+servers, either directly or through the MIX servers.
+When the messages were sent directly, the time needed to
+send the messages to the servers was significantly less
+than the time needed to retrieve the messages and therefore the send operation did not significantly affect
+throughput. When using the MIX servers, however,
+each MIX had to decrypt the message before sending it
+on to the next server in the chain. In our system, an RSA
+decryption took 0.7 seconds. As a result, the throughput
+of the system was reduced to about 1 packet/s 12 whenever the messages were sent through the MIXes. When
+
+10.5. Future and related work
+
+There are several security and fault-tolerance issues
+that are not adequately treated in our current implemen-
+
+12 All of the performance numbers we state will refer to tests using
+1 KByte packets.
+
+308
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+the cryptographic operations were removed from the
+system, the MIXes ceased to affect the throughput of the
+system. Given that there is hardware which can perform
+RSA decryption in under 1 ms [20], we believe that use
+of the MIXes will not significantly reduce the throughput in a real system.
+When the user reads a message from the message server, it can also perform this operation either securely or
+insecurely. When the read is performed insecurely, the
+user simply sends the table number and cell number of
+the message it wishes to read to one of the servers and the
+server sends the response. Since neither the request nor
+the response is encrypted, the only cryptographic operations performed are the end-to-end encryption and
+decryption performed by the user. In this case, if the messages are sent to the message servers directly (instead of
+through the MIXes), the system can handle 39 packets/
+s. When the incoming messages are sent through the
+MIXes, the throughput reduces to 1 packet/s (the rate at
+which the MIXes are able to provide messages to the
+message servers). However, when the cryptographic
+operations are removed, the throughput is again 39
+packets/s. We, therefore, believe that in a real system
+(which uses hardware for the cryptographic operations),
+the MIXes will not reduce the system throughput.
+When the user wishes to use the blinded read operation, the message servers need to decrypt the requests,
+exclusive-or together several messages in order to compute the response, and then encrypt the response. Since
+the decryption step involved performing RSA decryption, this part dominated the cost of performing the
+operation in our system. As a result of the cost of RSA
+decryption, the throughput was 1 packet/s. (Since the
+time to perform a blinded read was the same as the rate
+at which messages could pass through the MIXes, the
+use of the MIXes did not affect the overall throughput in
+this case). When the cryptographic operations were
+removed, the throughput increased to 27 packets/s. The
+difference between the throughput in this case an in the
+insecure read case was the cost of exclusive-oring the
+messages together (an average of 64 messages per
+response in our system).
+Since most of the costs associated with the system
+are on a per packet basis, the throughput of the system
+(in terms of bytes/s) can be increased by increasing the
+packet size. For this reason, the packet size used in a system should be set based on the expected distribution of
+the lengths of messages sent.
+
+mobile computers. In our approach, the computing costs
+of each of the protocols can be dynamically tuned by
+each of the mobile computers based on the amount of
+computing power available and the degree of any perceived threat to privacy. In addition, the protocols were
+designed to place most of the computational burden on
+the servers which can use specialized hardware in order
+to perform the necessary operations quickly.
+Acknowledgements
+
+We would to thank Birgit Pfitzmann, Mart n Abadi,
+Anindya Basu, and the anonymous referees who provided many valuable comments on drafts of this paper.
+
+
+References
+
+[1] A. Acharya and B. Badrinath, Delivering multicast messages in
+networks with mobile hosts,
+(1993).
+[2] A. Aziz and W. Diffie, Privacy and authentication for wireless
+local area networks, IEEE Personal Commun. 1(1) (1994)
+25^31.
+[3] M.J. Beller, L.-F. Chang and Y. Yacobi, Privacy and authentication on a portable communications system, IEEE J. Select.
+Areas Commun. 11(6) (1993) 821^829.
+[4] G. Brassard, C. Crepeau and J.-M. Robert, All-or-nothing
+disclosure of secrets,
+(1986) pp. 234^238.
+[5] U. Carlsen, Optimal privacy and authentication on a portable
+communications system, Operating Syst. Rev. 28(3) (1994)
+16^23.
+[6] D. Chaum, Untraceable electronic mail, return addresses, and
+digital pseudonyms, Commun. ACM 24(2) (1981) 84^88.
+[7] D. Chaum, The dining cryptographers problem: Unconditional
+sender and recipient untraceability, J. Crypto. 1(1) (1988) 65^
+75.
+[8] D. Duchamp, S.K. Feiner and G.Q. Maguire, Jr., Software
+technology for wireless mobile computing, IEEE Network Mag.
+5(6) (1991) 12^18.
+[9] National Bureau of Standards,
+(1977).
+[10] C. Park, K. Itoh and K. Kurosawa, Efficient anonymous
+channel and all/nothing election scheme,
+(1993) pp. 248^259.
+[11] A. Pfitzmann, B. Pfitzmann and M. Waidner, ISDN-MIXes:
+Untraceable communications with very small bandwidth
+overhead,
+(1991) 245^258.
+[12] A. Pfitzmann and M. Waidner, Networks without user observability, Comp. & Sec. 6 (1987) 158^166.
+[13] B. Pfitzmann, Breaking an efficient anonymous channel,
+(1994) pp. 339^348.
+[14] B. Pfitzmann and A. Pfitzmann, How to break the direct RSAimplementation of mixes,
+(1989) pp. 373^
+381.
+[15] C. Rackoff and D.R. Simon, Cryptographic defense against
+traffic analysis,
+(1993)
+pp. 672^681.
+[16] M.K. Reiter, Secure agreement protocols: Reliable and atomic
+group multicast in Rampart,
+(1994).
+[17] M.K. Reiter, A secure group membership protocol,
+(1994) pp. 176^189.
+Proc. 13th Int. Conf. Dist. Comp.
+
+Syst.
+
+CRYPTO '86
+
+Data Encryption Standard, FIPS-
+
+PUB-46
+
+EUROCRYPT '93
+
+IFIP/Sec '91
+
+EUROCRYPT '94
+
+EUROCRYPT '89
+
+12. Conclusions
+
+We have presented a set of protocols which work
+together to preserve privacy for users of mobile computers. As was shown in section 11, these protocols are
+both practical and efficient. A major concern in designing such protocols is the limited computing power of the
+
+Proc. 25th ACM Sym. Theory of Comp.
+
+Proc. 2nd ACM Conf. Comp. and
+
+Commun. Security
+
+Proc. 1994
+
+IEEE Sym. Research in Security and Privacy
+
+309
+
+D. Cooper, K. Birman / A private message service for mobile computers
+
+[18]
+
+[19]
+
+[20]
+
+M.K. Reiter, K.P. Birman and R. van Renesse, A security archi-
+
+David A. Cooper is a postdoctoral associate
+
+tecture for fault-tolerant systems, ACM Trans. Comp. Syst. 12(4)
+
+in the Department of Computer Science at
+
+(1994) 340^371.
+
+Cornell
+
+R. Rivest, A. Shamir and L. Adleman, A method for obtaining
+
+include distributed and mobile computing and
+
+digital signatures and public-key cryptosystems, Commun. ACM
+
+security and privacy.
+
+21 (2) (1978) 120^126.
+
+E-mail: dcooper@cs.cornell.edu
+
+University.
+
+His
+
+research
+
+interests
+
+M. Shand and J. Vuillemin, Fast implementations of RSA cryptography, 1993 IEEE 11th Sym. on Comp. Arch. (1993) pp. 252^
+259.
+
+[21]
+
+G.J. Simmons, Contemporary Cryptology: The Science of Infor-
+
+[22]
+
+B. Simons, J.L. Welch and N. Lynch, An overview of clock
+
+mation Integrity
+
+(IEEE Press, 1992).
+
+synchronization, in: Fault-Tolerant Distributed Computing (1990)
+pp. 84^96.
+[23]
+
+R. van Renesse, T.M. Hickey and K.P. Birman, Design and
+performance of Horus: A lightweight group communications
+system,
+(1994).
+
+Technical
+
+Report
+
+TR
+
+94-1442,
+
+Cornell
+
+University
+
+Kenneth
+
+P.
+
+Birman
+
+is a Professor in the
+
+Department of Computer Science at Cornell
+University, where he heads the Horus project.
+Birman received his M.S. and Ph.D. in computer science from the University of California,
+Berkeley, in 1981. He has been the Editor-inChief of ACM Transactions on Computer
+Systems since 1993, and was the founder of Isis
+Distributed
+
+Systems
+
+Inc.,
+
+a
+
+subsidiary
+
+of
+
+Stratus Computer Inc., where he is currently
+Chief Scientist.
+E-mail: ken@cs.cornell.edu
+
+

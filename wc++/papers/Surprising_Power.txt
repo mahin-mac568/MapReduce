@@ -1,0 +1,233 @@
+The Surprising Power of Epidemic Communication
+Kenneth P. Birman1
+Dept. of Computer Science
+Cornell University; Ithaca, New York 14583
+Abstract. We suggest that a combination of randomization and gossip communication can be used to
+overcome scalability barriers that limit the utility of many technologies for distributed system
+management, control and communications. The proposed approach can be used “directly”, but also
+makes possible a new kind of middleware. Broadly, we believe that these techniques enable distributed
+applications to achieve better resilience to stress and improved self-diagnosis and self-repair when
+failures or other severe disruptions occur.
+
+1. Introduction
+The focus of this position paper is on the most appropriate form of middleware to offer in support of
+distributed system management, control, information sharing and multicast communication. Our premise
+is that technology has been deficient in all of these areas. If recent advances can be transitioned into
+general practice, this could enable a new generation of better distributed systems, with value in settings
+ranging from such “critical infrastructure” areas as air traffic control and control of the restructured electric
+power grid to emerging areas, such as large-scale sensor networks, data mining and data fusion.
+The middleware domain of interest to us has witnessed some three decades of debate between distributed
+computing systems with strong properties (such as virtual synchrony, fault-tolerance, security, or
+guaranteed consistency) and those with weak properties (typified by web browsers, but extending into the
+broader area of web services and network applications built from remote procedure call and using timeout
+for failure detection). It seems fair to say that neither has been completely satisfactory, and commercial
+platforms have yet to include either kind of technology in a standard, widely available form.
+Systems with stronger guarantees would be preferable to systems with weaker guarantees if the two
+categories were comparable in other dimensions (including performance, ease of use, programming
+support, configuration and management, runtime control, complexity of runtime environment, etc).
+However, the two classes differ in most of these respects, hence the question is more subtle. Systems
+offering stronger guarantees are very often slow, scale poorly, and require complex infrastructure. They
+have rarely been supported to the same degree as other technologies by commercial vendors. Programming
+tools are inferior or completely lacking, and integration with commercial platforms is poor. Underlying
+this dubious picture is a broader phenomenon: the market for strong solutions has been too small to be
+commercially exciting, thus the sort of funding that has gone into the most commonly available commercial
+solutions dwarfs that available to the developers of solutions having stronger properties. Several attempts to
+commercialize distributed computing technologies with strong properties failed.
+The strong properties community typically defends its work by pointing to the anomalous behavior often
+experienced when using systems with weak guarantees: timeouts misinterpreted as evidence for failures,
+inconsistency that can arise when these occur, and the general shakiness of the resulting edifice. For
+situations in which lives might be at stake, large sums of money are at risk, or large numbers of users might
+be inconvenienced by outages, strong properties can give the operator confidence that a system will work
+as desired, when desired, and be available where needed, and make it clear what guarantees are needed
+from the hardware and network infrastructure.
+As to the commercial failure of systems offering strong properties and the relative success of weak
+technologies, the collapse of eCommerce is a reminder that the user community can be fickle; indeed, the
+1
+
+ken@cs.cornell.edu; 607-255-9199. This work was support in part by DARPA/AFRL grant number
+RADC F30602-99-1-0532 under ARPA Order J026.
+
+commercial community may already have abandoned weak solutions. If web services and similar
+technologies are to succeed, vendors will need to increase the degree of user confidence in the quality and
+reliability of their products. This, in turn, is likely to require that some system components implement
+strong properties.
+In this debate, there is a tendency for the proponents of each approach to overlook the legitimate criticisms
+raised by its opponents. In their advocacy of weak properties, many technologists forget that for other
+purposes, such as operating system software or databases, when we cannot explain precisely why a thing
+works, it probably doesn’t. Individuals who argue for a form of strong properties in other settings
+seemingly contradict themselves when it comes to distributed systems.
+The converse is also true. Systems with strong properties have traditionally scaled poorly, even when the
+workload is held constant as the system size or network size is increased. As strong systems are scaled up,
+they become fragile and difficult to manage, and are more and more prone to disruptive outages triggered
+by relatively minor phenomena, such as transient overloads or bugs that cause small numbers of machines
+to freeze up while still responding to failure-detection probes. A deeper issue also looms: in most
+distributed systems technologies offering strong properties, there are forms of background overhead that
+grow as the system scales up (often, quadratically). The reality, then, is that for a new world to emerge in
+which strong properties become part of the “usual” approach we need to find new ways of building them,
+so that very large-scale deployments are easily constructed, easily installed, and work “even better” than
+small ones. Proponents of systems with strong properties have often ignored these concerns, even to the
+degree of writing papers that assert that such-and-such a solution is scalable, and yet ignore substantial
+costs because the events that trigger them these costs are “rare”. Each time a belated analysis forces such a
+system to back away from its scalability claims, credibility is lost.
+In effect, one might argue that those of us who promote strong properties have been inattentive to the
+genuinely high costs, genuinely poor scalability, and genuinely poor manageability of the kinds of systems
+we are advocating. True, we offer guarantees not otherwise available, but in doing so, we also abandon
+many kinds of guarantees that the user community now takes for granted.
+
+2. The Promise of Peer-To-Peer Gossip
+Recent years have witnessed the emergence of a new kind of distributed system in which probabilistic
+properties are achieved using various forms of randomization. These solutions find their roots in a long
+history of work with probabilistic protocols, yet for the first time such methods have been applied
+successfully on a truly grand scale. Examples include Distributed Hash Tables (DHTs), which can be used
+to build large peer-to-peer indexing structures, peer-to-peer file systems and archival storage systems,
+gossip-based distributed database systems, Astrolabe [1] and Bimodal Multicast [2]. The latter are Cornelldeveloped systems, and combine elements of peer-to-peer design with gossip-based protocols.
+The thesis of this white paper is that these new systems, and especially those using the mixture of
+approaches employed by the Cornell work, offer a spectrum of properties that overcome the inadequacies
+of traditional “strong property” solutions such as virtual synchrony or Consensus-based state machine
+replication, at least as such systems are normally implemented.
+Bimodal Multicast and Astrolabe are resilient to disruption, route around transient network overloads, and
+have predictable normal-case and worst-case latencies. Both are “strongly convergent” and achieve a type
+of convergent consistency that can be quantified analytically and reasoned about mathematically.
+Overheads are fixed and low, exhibiting no growth even as the system is scaled up. While the guarantees
+of these systems are probabilistic and hence not as strong as the traditional kinds of strong properties
+identified earlier, they are strong enough to build upon directly and can even be used to implement
+stronger properties (with probability one) if so desired. Most important of all, although the code used to
+build these kinds of systems is rather simple and hence easily deployed (no special infrastructure is
+needed), they scale extremely well in all respects that matter and will achieve stronger guarantees as the
+size of a deployment rises.
+
+Although a number of systems are now using probabilistic techniques of the sort employed by the Cornell
+work, not all systems within this class have been analyzed and shown to be scalable. Many peer-to-peer
+systems include infrequently used but costly algorithms for such purposes as rebuilding link tables or
+migrating copies of files or indexing information (for example, the file copying mechanisms in PAST [3]
+and CFS [4], or the link rebuilding protocol in the Tapestry system [5]). In earlier generations of systems
+with strong properties, scalability problems can often be traced to such mechanisms. Indeed, a common
+pattern can be identified: an “infrequently” used mechanism that is triggered by a rare event, but has cost
+linear in the size of the system, and in which the frequency of the rare event is also roughly linear in the
+size of the system, yielding a quadratic form of overhead. Eventually, these overheads rise to swamp the
+available network, and the system melts down. To argue that DHT or peer-to-peer solutions are scalable,
+we need to show that they are immune to such problems, yet this aspect has been largely overlooked, much
+as it was overlooked by many developers of systems with strong properties in the past.
+On the other hand, it is certainly not the case that scalability is only possible in the manner of Astrolabe or
+Bimodal Multicast. It is quite possible that some of the DHT and peer-to-peer work cited does scale well,
+and that we thus have other solutions in hand and merely lack convincing demonstrations of their
+properties. Moreover, our own work has revealed that virtual synchrony can be implemented in a manner
+that would scale far better by borrowing some ideas from this new probabilistic world, but coupling them
+with other mechanisms that wait for safety to be achieved (with probability 1.0) before reporting events to
+the application [6]. We believe that scalability can be achieved in many ways, provided that the research
+community begins to attach appropriate importance to doing so, and to offering convincing proofs of
+scalability in association with the other types of analysis routinely undertaken for their solutions.
+
+3. Recommendations For Future Research and Conclusions
+We arrive at a small set of recommendations to the research community, and then conclude with some
+suggestions for future research in the area.
+1. For two decades, our focus has been on fault-tolerance and various forms of consistency that can be
+achieved in the presence of various forms of failure. The needs of potential users have shifted to
+emphasize scalability considerations, and we as a community need to follow the trend.
+2. The key to achieving scalability in distributed systems revolves around attentiveness to the costs
+associated not just with normal-mode behavior, but also to the worst-case costs associated with
+infrequent disruptions.
+3. Gossip-based techniques offer surprising scalability and robustness because information spreads
+through the system along a set of paths that grows exponentially over time. A disruption can delay the
+spread of data but cannot prevent it from reaching those participants that remain active and connected.
+4. This same exponential curve makes gossip-based solutions easy to analyze, because it permits us to
+make simplifications for the purpose of modeling the system. In practice our simplifications may lead
+to unrealistically optimistic or pessimistic analysis, but in light of an exponential epidemic, unrealistic
+optimism or pessimism results in just minor errors – predictions that may be off by a round or two of
+communication. Thus, in distinction to the case for more classical protocols and distributed systems,
+mathematics turns out to be an effective and practical tool for reasoning about gossip-based software.
+5. Peer-to-peer and DHT structures can be combined with gossip to implement robust systems that adapt
+rapidly as conditions change. In contrast, traditional peer-to-peer and DHT solutions will not discover
+that conditions have changed until an attempt is made to communicate with a machine and it is found
+to no longer be a system member. Gossip techniques allow a system to react and repair itself within
+seconds, at which point the peer-to-peer or DHT data structure can be trusted to be largely intact and
+correct. This, in turn, permits a much smarter style of planning within the DHT or peer-to-peer
+system.
+6. When desired, stronger properties can be superimposed on these kinds of scalable primitives, for
+example using Gupta’s methodology as reported in [6].
+We conclude with some thoughts concerning directions for further research:
+1. Build some ambitious real-world systems for large-scale use. The success we and others have had with
+gossip-based solutions suggests that it is time to build a “full scale” distributed systems infrastructure
+capable of supporting commercially interesting applications such as web-services, but offering superior
+
+2.
+
+3.
+
+4.
+
+5.
+
+6.
+
+manageability, performance and scalability. To convince the networking community that these
+techniques really work, are easy to use, and are easy to understand, we need to show potential
+practitioners examples of real systems which they can play with, evaluate, perhaps extend or imitate.
+Little of this important practical work has been completed.
+Learn more about the properties of large-scale communication environments. A challenge that
+systems like Astrolabe must overcome is the need to communicate despite potentially high churn rates,
+firewalls, and asymmetric connectivity. As a community, we need to better understand the options and
+fundamental limitations associated with large-scale environments and find ways of encapsulating “best
+of breed” solutions in standard packages.
+Learn to talk about properties of systems “in the large.” We need to begin to think about the
+properties of really large systems, and to find ways of doing so that let us abstract beyond the
+behaviors of individual components and to talk about large-scale system behaviors spanning thousands
+or even tens of thousands of nodes.
+Pursue metaphors from emerging fields to which our ideas might be applicable. It is intuitively
+appealing to speculate that many kinds of physical systems, notably biological ones, may operate along
+principles analogous to the ones exploited in these new kinds of scalable systems. For example,
+communities of insects, or cells in the body, signal with probabilistic mechanisms (proteins of various
+kinds), and are extremely robust to disruption. Elucidating such a connection would let the distributed
+systems community demonstrate its relevance to the rapidly growing biology community and might
+infuse our area with a new kind of very exciting application to investigate.
+Seize the high ground by demonstrating success in emerging large-scale networks used for narrow
+purposes, such as sensor grids. The thinking here is that we need to look for completely new kinds of
+applications on which we can demonstrate the value of these techniques, ideally by targeting
+opportunities outside of the traditional Internet domain. One that seems especially interesting involves
+sensor networks. Gupta, elsewhere in this volume, speaks to this issue at some length, hence I limit
+myself to the observation that compelling success in real systems with large numbers of real computers
+would quickly stimulate a significant wave of research and reveal great numbers of new applications.
+Moreover, the Internet is a relatively mature world and it may not be realistic to try and change it; this
+is not true for many emerging areas, such as sensor networks.
+Revisit classical distributed systems problems from a scalability perspective. We need to remove our
+rosy glasses and revisit many of the classical problems from a scalability perspective. How scalable
+are the traditional solutions to problems such as Consensus or Byzantine Agreement? Are there
+intrinsic scalability limitations to some problems, or perhaps even a “complexity hierarchy” for
+scalability? In particular, the costs of infrequent system mechanisms need to be studied more closely;
+a great many distributed systems have some mechanism that looks costly but runs rarely.
+Traditionally, this is cited as a reason to ignore the associated costs. But “rarely”, one finds, is a
+relative term; in a very large setting, rare events may occur with unexpectedly high absolute frequency.
+The costs of these rare events may thus represent a huge load and even rise to limit scalability. Our
+community has little chance of winning the debate with those who ignore properties if we, in our own
+turn, ignore some of the most serious costs associated with the solutions we promote!
+
+The surprising power and scalability of gossip communication could open the door to a new wave of
+distributed systems combining strong properties with the type of robustness and predictability which has
+been lacking in classical systems having strong properties. Meanwhile, the commercial community is
+starting to demand more of the weaker web-based solutions on which they have come to depend. Our
+ability to offer strong properties in appealing packages could spur a new generation of distributed systems
+applications in which for the first time, the community associated with strong solutions would emerge as
+full-fledged participants.
+
+4. References
+1.
+2.
+3.
+4.
+5.
+6.
+
+Astrolabe: A Robust and Scalable Technology for Distributed System Monitoring, Management, and
+Data Mining. Robbert van Renesse, and Kenneth Birman. Submitted to ACM TOCS, November 2001
+Bimodal Multicast. Kenneth P. Birman, Mark Hayden, Oznur Ozkasap, Zhen Xiao, Mihai Budiu and
+Yaron Minsky. ACM Transactions on Computer Systems, Vol. 17, No. 2, pp 41-88, May, 1999.
+Storage Management and Caching in PAST, A Large-scale, Persistent Peer-to-peer Storage Utility.
+Antony Rowstron (Microsoft Research), Peter Druschel (Rice University)
+Wide-Area Cooperative Storage with CFS. Frank Dabek, M. Frans Kaashoek, David Karger, Robert
+Morris (MIT), Ion Stoica (UC Berkeley)
+A Scalable Content-Addressable Network. S. Ratnasamy, P. Francis, M. Handley, R. Karp, and S.
+Schenker. Proc. ACM SIGCOMM, San Diego, CA, August 2001.
+Fighting Fire with Fire: Using Randomized Gossip to Combat Stochastic Reliability Limits. Indranil
+Gupta, Ken Birman, Robbert van Renesse. Quality and Reliability Engineering International, 18: 165184 (Wiley; 2002)
+
+
