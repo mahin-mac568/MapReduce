@@ -15,7 +15,7 @@ std::vector<fs::path> utils::find_all_files
             fs::path cur_file = entry.path();
             std::string type(cur_file.extension());
             if(pred(type)) {
-	        files_to_sweep.push_back(std::move(cur_file));
+	            files_to_sweep.push_back(std::move(cur_file));
             }
         }
     }

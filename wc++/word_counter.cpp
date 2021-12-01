@@ -13,9 +13,13 @@
 
 #include "utils.hpp"
 
+// Character conversion functions 
+char compress_newline(char); 
+char insert_punct_break(char); 
+// also make sure to use tolower() to convert characters to lowercase 
+
 wc::wordCounter::wordCounter(const std::string& dir, uint32_t num_threads)
-    : dir(dir),
-      num_threads(num_threads) 
+  : dir(dir), num_threads(num_threads) 
 {
     
 }
@@ -82,7 +86,25 @@ void wc::wordCounter::process_file(fs::path& file, std::map<std::string, uint64_
     buffer << fin.rdbuf();
     std::string contents = buffer.str();
 
-    // break the word into sequences of alphanumeric characters, ignoring other characters
+    // BEFORE: break the content into sequences of alphanumeric characters, ignoring other characters
+    // NOW: convert uppercase to lowercase, convert newlines to spaces, and turn numbers and punctuation to '|'
+    std::transform(contents.begin(), contents.end(), contents.begin(), 
+      [](unsigned char c){ return std::tolower(c); });
+    std::transform(contents.begin(), contents.end(), contents.begin(), 
+      [](unsigned char c){ return compress_newline(c); });
+    std::transform(contents.begin(), contents.end(), contents.begin(), 
+      [](unsigned char c){ return insert_punct_break(c); });
+    // inspiration from https://stackoverflow.com/questions/313970/how-to-convert-an-instance-of-stdstring-to-lower-case
+
+    // Create n-grams out of the contents string using the '|' breaks 
+    int prev_break_idx = 0; 
+    for (int i=0; i<contents.size(); i++) {
+        std::string segment; 
+        if (contents[i] == '|') {
+            int diff = i - prev_break_idx; 
+            segment = contents.substr(0 , diff);
+        }
+    }
 
     // NEED TO CHANGE THIS TO RECOGNIZE N-GRAMS
     std::regex rgx("\\W+"); 
@@ -94,5 +116,24 @@ void wc::wordCounter::process_file(fs::path& file, std::map<std::string, uint64_
         if(*iter != "") {
             local_freq[*iter]++;
         }
+    }
+}
+
+
+char compress_newline(char c) {
+    if (c == '\n' || c == '\t') {   // compress tab as well 
+        return ' '; 
+    }
+    else {
+        return c; 
+    }
+}
+
+char insert_punct_break(char c) {
+    if (isdigit(c) || ispunct(c)) { // replace numbers as well 
+        return '|'; 
+    }
+    else {
+        return c; 
     }
 }
