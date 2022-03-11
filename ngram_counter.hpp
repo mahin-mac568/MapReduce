@@ -1,5 +1,3 @@
-/* Used Sagar's word-counting code */ 
-
 #include <filesystem>
 #include <vector>
 #include <map>

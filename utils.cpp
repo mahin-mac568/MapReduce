@@ -1,5 +1,3 @@
-/* Used Sagar's file-finding code */ 
-
 #include "utils.hpp"
 
 #include <list>

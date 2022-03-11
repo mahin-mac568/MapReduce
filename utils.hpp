@@ -1,5 +1,3 @@
-/* Used Sagar's file-finding code */ 
-
 #include <filesystem>
 #include <functional>
 #include <vector>

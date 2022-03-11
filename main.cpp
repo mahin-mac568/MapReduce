@@ -1,5 +1,3 @@
-/* Used Sagar's code */ 
-
 #include <iostream>
 
 #include "ngram_counter.hpp"

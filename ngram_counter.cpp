@@ -1,5 +1,3 @@
-/* Used Sagar's word-counting code */ 
-
 #include "ngram_counter.hpp"
 
 #include <algorithm>
