@@ -17,4 +17,18 @@ int main(int argc, char* argv[]) {
   
   ngc::ngramCounter word_counter(argv[1], t, n);
   word_counter.compute(n);
+
+
+  /* DISPLAY */
+  
+  std::string display_header = "THE TOP FIVE N-GRAMS FOR THREAD "; 
+
+  for (auto [thread_num, top_five] : word_counter.display) {
+      std::cout << display_header << std::to_string(thread_num) << ":" << std::endl; 
+      for (int i=0; i<top_five.size(); i++) {
+          std::cout << " (" << i+1 << ") '" << top_five[i].first << "' with a count of " << top_five[i].second << std::endl; 
+      }
+      std::cout << "" << std::endl; 
+  } 
+
 }

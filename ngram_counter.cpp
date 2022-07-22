@@ -13,10 +13,11 @@
 
 #include "utils.hpp"
 
+
 // Character conversion functions 
 char compress_newline(char); 
 char insert_punct_break(char); 
-char keep_alpha_or_space(char); 
+char keep_alpha_or_space(char);
 
 ngc::ngramCounter::ngramCounter(const std::string& dir, uint32_t num_threads, uint32_t ngram_length)
   : dir(dir), num_threads(num_threads), ngram_length(ngram_length) {}
@@ -257,37 +258,33 @@ void ngc::ngramCounter::compute(uint32_t ngram_length) {
             ngram_counts_pair++; 
         }
 
-        // Sort the reduced collection display this thread's top five 
+        // Sort the reduced collection, display this thread's top five 
         uint32_t index = 0;
         for(auto& [ngram, cnt] : reduced_collection) {
             sorted_reduced_collection.emplace_back(std::make_pair(ngram, cnt));
             index++; 
         }
-        std::sort(sorted_reduced_collection.begin(), 
-                  sorted_reduced_collection.end(), 
+        std::sort(sorted_reduced_collection.begin(), sorted_reduced_collection.end(), 
                   [](const pair_t& p1, const pair_t& p2) {
             return p1.second > p2.second || (p1.second == p2.second && p1.first < p2.first);
         });
 
-        // Print out the top five for this thread 
-        std::cout << "THE TOP FIVE N-GRAMS FOR THREAD " << curr_thread << std::endl; 
-        const int display_length = 5; 
-        for (int i=0; i<display_length; i++) {
-            if (i > sorted_reduced_collection.size()-1) {
-                std::cout << "" << std::endl; 
-            }
-            else {
-                std::cout << sorted_reduced_collection[i].first << ": " << 
-                  sorted_reduced_collection[i].second << std::endl; 
-            }
-        }
-        std::cout << "" << std::endl; 
-
         // update this->freq and exit
         std::lock_guard<std::mutex> lock(wc_mtx);
+
+        int count = 0; 
+        const int display_length = 5; 
+        awaiting_ngrams top_five; 
+        
         for(auto [ngram, cnt] : sorted_reduced_collection) {
             freq[ngram] += cnt;
+            if (count < display_length) {
+                top_five.push_back(std::make_pair(ngram, cnt)); 
+                count++; 
+            } 
         }
+
+        display[curr_thread+1] = top_five;      // +1, so the thread # is non-zero
     };
 
     // start all threads and wait for them to finish
