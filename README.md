@@ -14,7 +14,7 @@ cd MapReduce
 ```
 ./main minipapers <num_threads> <num_ngrams>
 ```
-### 4. Optional: View the results on the app web page!
+### 4. Optional: View the results on the app's web page!
 ```
 python3 -m http.server 3000
 ```
