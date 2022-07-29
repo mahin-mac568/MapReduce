@@ -18,6 +18,10 @@
 char compress_newline(char); 
 char insert_punct_break(char); 
 char keep_alpha_or_space(char);
+std::string process_text(std::string); 
+
+// MapReduce functions 
+
 
 ngc::ngramCounter::ngramCounter(const std::string& dir, uint32_t num_threads, uint32_t ngram_length)
   : dir(dir), num_threads(num_threads), ngram_length(ngram_length) {}
@@ -89,7 +93,6 @@ void ngc::ngramCounter::compute(uint32_t ngram_length) {
             [](unsigned char c){ return insert_punct_break(c); });
             std::transform(contents.begin(), contents.end(), contents.begin(), 
             [](unsigned char c){ return keep_alpha_or_space(c); });
-            // inspiration from https://stackoverflow.com/questions/313970/how-to-convert-an-instance-of-stdstring-to-lower-case
 
             // Initialize a list to hold the longest possible n-grams 
             std::vector<std::string> max_ngrams; 
@@ -102,7 +105,7 @@ void ngc::ngramCounter::compute(uint32_t ngram_length) {
                     int pos = contents_copy.find("|"); 
                     std::string an_ngram = contents_copy.substr(0, pos);
                     std::string everything_else = contents_copy.substr(pos + 1);
-                    // inspiration from https://www.geeksforgeeks.org/substring-in-cpp/
+                    
                     if (an_ngram[0] == ' ') {
                         while (an_ngram[0] == ' ') {
                             an_ngram = an_ngram.substr(1);
@@ -311,3 +314,16 @@ char insert_punct_break(char c) {
 char keep_alpha_or_space(char c) {
     return (isalpha(c) || c == ' ') ? c : '|'; 
 }
+
+std::string process_text(std::string contents) {
+    std::transform(contents.begin(), contents.end(), contents.begin(), 
+    [](unsigned char c){ return std::tolower(c); });
+    std::transform(contents.begin(), contents.end(), contents.begin(), 
+    [](unsigned char c){ return compress_newline(c); });
+    std::transform(contents.begin(), contents.end(), contents.begin(), 
+    [](unsigned char c){ return insert_punct_break(c); });
+    std::transform(contents.begin(), contents.end(), contents.begin(), 
+    [](unsigned char c){ return keep_alpha_or_space(c); });
+
+    return contents; 
+} 
