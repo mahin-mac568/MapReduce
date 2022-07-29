@@ -1,19 +1,21 @@
 # MapReduce
 
 ## Quickstart Guide
-### 1. SSH into UGCLinux
-```bash
-ssh mac568@ugclinux.cs.cornell.edu
-```
-### 2. Navigate to MapReduce folder
+
+### 1. Navigate to MapReduce folder
 ```
 cd MapReduce
 ```
-### 3. Compile the program 
+### 2. Compile the program 
 ```
 ./compile.sh
 ```
-### 4. Run the program 
+### 3. Run the program 
 ```
 ./main minipapers <num_threads> <num_ngrams>
 ```
+### 4. Optional: View the results on the web page!
+```
+python3 -m http.server 3000
+```
+### 5. Navigate to http://localhost:3000/app.html
